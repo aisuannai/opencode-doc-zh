@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCIM · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-scim" data-group="Console" data-src="https://opencode.ai/docs/console/scim/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>SCIM</h1>
+<p class="lede">目录同步（Directory sync，SCIM 2.0）让你在身份提供商（IdP）里指派人员时自动把人加进工作区，取消指派时自动收回访问权。角色仍由 Console 管理。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>如果说 <a href="console-sso.html">SSO</a> 解决的是「怎么进门」，SCIM 解决的就是「名单谁说了算」。开启后，你们 Okta / Entra ID 里把员工加进某个应用，Console 工作区就自动多一个成员；员工调岗、离职被取消指派，访问权立刻冻结。人事异动只需要在 IdP 一处操作，Console 自动跟上——这正是大公司青睐的「单一事实来源」模式。</p>
+</aside>
+
+<div class="term-head"><span>text</span><span>SCIM Base URL</span></div>
+<pre><code>https://opencode.ai/console/scim/v2</code></pre>
+
+<h2>开始之前</h2>
+<ul>
+<li>先为工作区配置好 <a href="console-sso.html">SSO</a>。</li>
+<li><a href="console-sso.html#verify-email-domains">验证</a>员工登录所用的每一个邮箱域名。目录同步只会添加已验证域名下的人；其他人请从 <a href="console-members.html">Members</a> 页手动邀请。</li>
+</ul>
+
+<h2>创建 Token</h2>
+<p>只有工作区所有者（Owner）可以配置目录同步，或创建、吊销其 token。</p>
+<ol>
+<li>打开 <strong>Settings › Security</strong>，在 <strong>Directory sync</strong> 下点击 <strong>Set up</strong>。</li>
+<li>复制 <strong>SCIM base URL</strong> 和 token。token 只显示一次，请存进密码管理器（secrets manager）。</li>
+</ol>
+<p>你的身份提供商会在每个请求中携带该 token：</p>
+<div class="term-head"><span>text</span><span>请求头</span></div>
+<pre><code>Authorization: Bearer &lt;token&gt;</code></pre>
+
+<h2>连接你的身份提供商</h2>
+<h3>Okta</h3>
+<ol>
+<li>添加 <strong>SCIM 2.0 Test App (Header Auth)</strong> 应用。</li>
+<li>设置 base URL，并在 <strong>API Token</strong> 中输入 <code>Bearer </code> 加上 token。</li>
+<li>启用 <strong>Create Users</strong>、<strong>Update User Attributes</strong> 和 <strong>Deactivate Users</strong>。<strong>Import Groups</strong> 和密码同步保持关闭。</li>
+</ol>
+<h3>Microsoft Entra ID</h3>
+<ol>
+<li>在你的企业应用中打开 <strong>Provisioning</strong>，把模式设为 <strong>Automatic</strong>。</li>
+<li>把 base URL 填为 <strong>Tenant URL</strong>，token 填为 <strong>Secret Token</strong>。</li>
+<li>指派用户和组，然后开始预配（provisioning）。</li>
+</ol>
+<h3>其他提供商</h3>
+<p>使用一个支持请求头 token 认证的 SCIM 2.0 应用，指向上述 base URL。Console 支持 <code>/Users</code> 和 <code>/Groups</code> 端点。</p>
+<p>先只指派一位测试人员。第一次请求之后，<strong>Directory sync</strong> 会显示 <strong>Connected to your identity provider</strong>。</p>
+
+<h2>同步内容</h2>
+<table>
+<thead><tr><th>在身份提供商中的操作</th><th>在 Console 中的效果</th></tr></thead>
+<tbody>
+<tr><td>指派一个人</td><td>以 <strong>Member</strong> 身份加入。已有成员保持原有角色。</td></tr>
+<tr><td>更新姓名</td><td>资料同步更新。</td></tr>
+<tr><td>取消指派或停用</td><td>访问被挂起，显示为 <strong>Deactivated</strong>。其创建的 API key 被吊销。</td></tr>
+<tr><td>重新指派</td><td>访问恢复。已吊销的 key 保持吊销状态。</td></tr>
+<tr><td>删除</td><td>从工作区移除。其账号和其他工作区不受影响。</td></tr>
+</tbody>
+</table>
+<ul>
+<li>目录同步不会改动角色和邮箱地址。</li>
+<li>最后一位所有者不能被停用或删除。</li>
+<li>有 <a href="console-go.html">Go</a> 订阅的工作区无法通过目录同步添加成员。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>两个容易踩的坑：其一，「重新指派」后<strong>被吊销的 key 不会复活</strong>——之前挂在他名下跑的自动化任务要重新发 key；其二，有 Go 订阅的工作区不能靠 SCIM 加人，因为 Go 是按座位计费的，加人要走 <a href="console-members.html">Members</a> 的邀请/升级流程。</p>
+</aside>
+
+<h2>组（Groups）</h2>
+<p>把组推送过来即可给成员打标签，例如用 Okta 的 <strong>Push Groups</strong> 或 Entra 的组指派。推送组之前先指派组里的人。</p>
+<div class="term-head"><span>text</span><span>组 → 标签示意</span></div>
+<pre><code>Platform Admins  →  platform-admins</code></pre>
+<p>每个组都会用一个以该组命名的标签来标记它的成员。在 <strong>Settings › Security › Group tags</strong> 下，你可以重命名标签、把多个组指向同一个标签，或停止对某个组打标签。离开一个组会移除对应的标签。</p>
+
+<h2>轮换 Token</h2>
+<ol>
+<li>点击 <strong>New token</strong>，把它安装到你的身份提供商。</li>
+<li>等到新 token 显示出最近使用时间（last use）。</li>
+<li>吊销旧 token。</li>
+</ol>
+<p>吊销 token 会阻止后续的更新，但不改变现有成员。删除 SSO 连接会吊销所有 token。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「先装新 token → 等新 token 出现使用记录 → 再吊销旧的」是标准的零停机轮换顺序：中间有个新旧并存的窗口，保证切换瞬间没有断档。直接吊销旧的再慢慢装新的，IdP 的每次同步都会在这段空窗期报 401。</p>
+</aside>
+
+<h2>SSO 与目录同步</h2>
+<p>一旦工作区签发过 SCIM token，SSO 就不再<a href="console-sso.html#automatic-membership">自动添加成员</a>。谁属于工作区由目录（directory）说了算——即使 token 后来被吊销也是如此。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>这其实是「领导权交接」：没配 SCIM 前，登录即加入（SSO 管名单）；配了 SCIM 后，名单的权威永远交给目录，哪怕 SCIM 后来停了，Console 也不会自动退回「登录即加入」的宽松模式。这防止了「SCIM 停一下，被 IdP 移除的人又靠 SSO 自动混进来」的安全漏洞。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

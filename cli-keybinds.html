@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快捷键 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-keybinds" data-group="CLI" data-src="https://opencode.ai/docs/cli/keybinds/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>快捷键</h1>
+<p class="lede">OpenCode TUI 的所有按键行为都可以在 <code>cli.json</code> 的 <code>keybinds</code> 里自定义。本页列出全部命令 ID 和默认绑定，想改哪个就覆盖哪个。</p>
+
+<h2>自定义方式</h2>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}</code></pre>
+<p>单个按键用字符串：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}</code></pre>
+<p>多个备选按键用逗号分隔（或写成数组）：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}</code></pre>
+<p>用 <code>"none"</code> 或 <code>false</code> 禁用某个绑定：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}</code></pre>
+<p>用对象形式可以精细控制按键事件行为：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}</code></pre>
+<p>前导键（leader）默认是 <kbd>Ctrl+X</kbd>。其它绑定里的 <code>&lt;leader&gt;</code> 指的就是这个键：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "&lt;leader&gt;m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}</code></pre>
+<p>未知的命令 ID 会被忽略。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>前导键就像 vim 里的「先按键再按字母」组合拳：<kbd>Ctrl+X</kbd> 相当于喊一声「预备——」，接下来按 <kbd>M</kbd> 就是「列出模型」、按 <kbd>N</kbd> 就是「新会话」。把大量组合挂在一个前缀键下，等于把两层快捷键空间叠在一起，既不挤占单键，又好记（M=Model、N=New、L=List）。改成 <code>ctrl+space</code> 只需要一处，所有 <code>&lt;leader&gt;</code> 组合跟着变。</p>
+</aside>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>覆盖绑定是「整体替换」而不是「追加」：把 <code>app.exit</code> 改成 <code>["ctrl+c"]</code> 后，默认的 <kbd>Ctrl+D</kbd> 和 <code>&lt;leader&gt;q</code> 就都不再退出程序了。另外注意 leader 超时（<code>leader.timeout</code>，默认毫秒数）——按完前导键后超时未按下一个键，组合就作废，键位有延迟的远程终端可以把这个值调大。</p>
+</aside>
+
+<h2>应用</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>leader</code></td><td><code>ctrl+x</code></td><td>组合键的前导键</td></tr>
+<tr><td><code>app.exit</code></td><td><code>ctrl+c,ctrl+d,&lt;leader&gt;q</code></td><td>退出应用</td></tr>
+<tr><td><code>app.debug</code></td><td><code>none</code></td><td>切换调试面板</td></tr>
+<tr><td><code>app.console</code></td><td><code>none</code></td><td>切换控制台</td></tr>
+<tr><td><code>app.scrap</code></td><td><code>none</code></td><td>打开草稿屏（scrap screen）</td></tr>
+<tr><td><code>app.toggle.animations</code></td><td><code>none</code></td><td>切换动画开关</td></tr>
+<tr><td><code>app.toggle.file_context</code></td><td><code>none</code></td><td>切换文件上下文</td></tr>
+<tr><td><code>app.toggle.diffwrap</code></td><td><code>none</code></td><td>切换 diff 折行</td></tr>
+<tr><td><code>app.toggle.paste_summary</code></td><td><code>none</code></td><td>切换粘贴内容摘要</td></tr>
+<tr><td><code>command.palette.show</code></td><td><code>ctrl+p</code></td><td>列出可用命令</td></tr>
+<tr><td><code>help.show</code></td><td><code>none</code></td><td>打开帮助对话框</td></tr>
+<tr><td><code>docs.open</code></td><td><code>none</code></td><td>打开文档</td></tr>
+<tr><td><code>opencode.settings</code></td><td><code>none</code></td><td>打开设置</td></tr>
+<tr><td><code>server.pair</code></td><td><code>none</code></td><td>配对设备</td></tr>
+<tr><td><code>service.restart</code></td><td><code>none</code></td><td>重启服务</td></tr>
+<tr><td><code>location.reload</code></td><td><code>none</code></td><td>重载配置</td></tr>
+</tbody>
+</table>
+
+<h2>Mini</h2>
+<p><code>app.clear</code> 命令只在 <a href="cli-intro.html"><code>opencode mini</code></a> 里可用。按 <kbd>Ctrl+L</kbd> 清空可见屏幕并重新绘制 prompt。终端的滚动历史（scrollback）会保留：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}</code></pre>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>app.clear</code></td><td><code>ctrl+l</code></td><td>清空屏幕</td></tr>
+</tbody>
+</table>
+
+<h2>Diff 查看器</h2>
+<p>按 <kbd>d</kbd>（<code>diff.switch_source</code>）可以选择 <strong>All</strong>、<strong>Committed</strong>、<strong>Uncommitted</strong> 或 <strong>Last turn</strong>（会话内），或选择 <strong>Base</strong> 更改对比分支。选择会一直保留到 TUI 退出。初始范围可用 <a href="cli-config.html">cli.json 的 <code>diffs.source</code></a> 设置。</p>
+<p>滚动、翻页和开头/结尾快捷键始终作用于 diff 视图本身。键盘焦点不可切换：点击文件打开它，点击文件夹展开或收起，用鼠标滚轮滚动文件树。</p>
+<p>用 <kbd>n</kbd> / <kbd>p</kbd> 或 <kbd>alt+down</kbd> / <kbd>alt+up</kbd>（macOS 上是 Option 键）在文件之间移动。在 diff 查看器内部，Alt 组合键导航的是文件而非会话标签页。</p>
+<p>按 <kbd>m</kbd> 把文件标记为已审查并折叠它的补丁正文。在全部文件视图里再按一次 <kbd>m</kbd> 可取消标记并重新展开补丁。单文件视图里，标记已审查后会自动跳到下一个文件，但停在最后一个文件不会回绕；取消标记永远不会自动前进。</p>
+<p>在侧边栏或 diff 标题上右键点击文件，可选 <strong>Mark complete</strong>（或 <strong>Mark incomplete</strong>）。这改变的是和 <kbd>m</kbd> 相同的已审查状态。从菜单里标记其它文件为完成，既不会选中它，也不会让当前阅读的文件前进。</p>
+<p>带 Shift 的 <code>diff.help</code> 备选按键是为了兼容那些在按下 <kbd>?</kbd> 时会报告 Shift 修饰键的终端。</p>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>diff.open</code></td><td><code>none</code></td><td>打开 diff 查看器</td></tr>
+<tr><td><code>diff.close</code></td><td><code>escape,q</code></td><td>关闭 diff 查看器</td></tr>
+<tr><td><code>diff.down</code></td><td><code>j,down</code></td><td>diff 视图下移</td></tr>
+<tr><td><code>diff.up</code></td><td><code>k,up</code></td><td>diff 视图上移</td></tr>
+<tr><td><code>diff.page.down</code></td><td><code>pagedown,ctrl+f</code></td><td>diff 视图向下翻页</td></tr>
+<tr><td><code>diff.page.up</code></td><td><code>pageup,ctrl+b</code></td><td>diff 视图向上翻页</td></tr>
+<tr><td><code>diff.half_page.down</code></td><td><code>ctrl+d</code></td><td>diff 视图向下滚动半页</td></tr>
+<tr><td><code>diff.half_page.up</code></td><td><code>ctrl+u</code></td><td>diff 视图向上滚动半页</td></tr>
+<tr><td><code>diff.first</code></td><td><code>gg,home</code></td><td>跳到 diff 开头</td></tr>
+<tr><td><code>diff.last</code></td><td><code>shift+g,end</code></td><td>跳到 diff 结尾</td></tr>
+<tr><td><code>diff.next_hunk</code></td><td><code>]</code></td><td>跳到下一个 diff hunk（代码块）</td></tr>
+<tr><td><code>diff.previous_hunk</code></td><td><code>[</code></td><td>跳到上一个 diff hunk</td></tr>
+<tr><td><code>diff.next_file</code></td><td><code>n,alt+down</code></td><td>跳到下一个 diff 文件</td></tr>
+<tr><td><code>diff.previous_file</code></td><td><code>p,alt+up</code></td><td>跳到上一个 diff 文件</td></tr>
+<tr><td><code>diff.toggle_file_tree</code></td><td><code>b</code></td><td>切换 diff 文件树显示</td></tr>
+<tr><td><code>diff.single_patch</code></td><td><code>s</code></td><td>切换单补丁视图</td></tr>
+<tr><td><code>diff.switch_source</code></td><td><code>d</code></td><td>选择 diff 审查范围</td></tr>
+<tr><td><code>diff.toggle_view</code></td><td><code>v</code></td><td>切换 diff 的分栏 / 统一视图</td></tr>
+<tr><td><code>diff.toggle_fullscreen</code></td><td><code>f</code></td><td>切换 diff 查看器全屏</td></tr>
+<tr><td><code>diff.mark_reviewed</code></td><td><code>m</code></td><td>切换选中 diff 文件的已审查状态</td></tr>
+<tr><td><code>diff.help</code></td><td><code>?,shift+?,shift+/</code></td><td>显示更多 diff 查看器快捷键</td></tr>
+</tbody>
+</table>
+<p>已退役的 <code>diff.toggle</code>、<code>diff.expand</code>、<code>diff.expand_all</code>、<code>diff.collapse</code> 和 <code>diff.switch_focus</code> 配置项仍被接受，但不再注册任何快捷键。</p>
+
+<h2>外观与导航</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>prompt.editor</code></td><td><code>&lt;leader&gt;e</code></td><td>打开外部编辑器</td></tr>
+<tr><td><code>theme.switch</code></td><td><code>none</code></td><td>列出可用主题</td></tr>
+<tr><td><code>theme.switch_mode</code></td><td><code>none</code></td><td>在亮色与暗色主题模式间切换</td></tr>
+<tr><td><code>theme.mode.lock</code></td><td><code>none</code></td><td>锁定或解锁主题模式</td></tr>
+<tr><td><code>session.sidebar.toggle</code></td><td><code>&lt;leader&gt;b</code></td><td>切换侧边栏</td></tr>
+<tr><td><code>pane.focus.left</code></td><td><code>&lt;leader&gt;left</code></td><td>聚焦会话面板</td></tr>
+<tr><td><code>pane.focus.right</code></td><td><code>&lt;leader&gt;right</code></td><td>聚焦右侧面板</td></tr>
+<tr><td><code>terminal.select</code></td><td><code>&lt;leader&gt;down</code></td><td>选中终端</td></tr>
+<tr><td><code>terminal.toggle</code></td><td><code>&lt;leader&gt;t</code></td><td>切换终端面板</td></tr>
+<tr><td><code>terminal.close</code></td><td><code>&lt;leader&gt;up</code></td><td>关闭终端面板</td></tr>
+<tr><td><code>session.toggle.scrollbar</code></td><td><code>none</code></td><td>切换会话滚动条</td></tr>
+<tr><td><code>opencode.status</code></td><td><code>&lt;leader&gt;s</code></td><td>查看状态</td></tr>
+<tr><td><code>opencode.debug</code></td><td><code>none</code></td><td>查看调试信息</td></tr>
+</tbody>
+</table>
+
+<h2>会话</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>session.export</code></td><td><code>&lt;leader&gt;x</code></td><td>把会话导出到编辑器</td></tr>
+<tr><td><code>session.copy</code></td><td><code>none</code></td><td>复制会话记录</td></tr>
+<tr><td><code>session.copy.id</code></td><td><code>none</code></td><td>复制会话 ID</td></tr>
+<tr><td><code>session.move</code></td><td><code>none</code></td><td>移动会话</td></tr>
+<tr><td><code>session.new</code></td><td><code>&lt;leader&gt;n</code></td><td>新建会话</td></tr>
+<tr><td><code>session.list</code></td><td><code>&lt;leader&gt;l</code></td><td>列出所有会话</td></tr>
+<tr><td><code>open.menu</code></td><td><code>ctrl+o</code></td><td>打开最近的会话和项目</td></tr>
+<tr><td><code>session.tab.next</code></td><td><code>ctrl+tab,alt+down</code></td><td>切到下一个会话标签页</td></tr>
+<tr><td><code>session.tab.previous</code></td><td><code>ctrl+shift+tab,alt+up</code></td><td>切到上一个会话标签页</td></tr>
+<tr><td><code>session.tab.history.back</code></td><td><code>none</code></td><td>在会话标签页历史中后退</td></tr>
+<tr><td><code>session.tab.history.forward</code></td><td><code>ctrl+i</code></td><td>在会话标签页历史中前进</td></tr>
+<tr><td><code>session.tab.next_unread</code></td><td><code>alt+shift+down</code></td><td>切到下一个未读会话标签页</td></tr>
+<tr><td><code>session.tab.previous_unread</code></td><td><code>alt+shift+up</code></td><td>切到上一个未读会话标签页</td></tr>
+<tr><td><code>session.tab.close</code></td><td><code>&lt;leader&gt;w</code></td><td>关闭当前会话标签页</td></tr>
+<tr><td><code>session.tab.reopen</code></td><td><code>ctrl+shift+t</code></td><td>重新打开最近关闭的会话标签页</td></tr>
+<tr><td><code>session.timeline</code></td><td><code>&lt;leader&gt;g</code></td><td>显示会话时间线</td></tr>
+<tr><td><code>session.fork</code></td><td><code>none</code></td><td>从某条消息分叉（fork）会话</td></tr>
+<tr><td><code>session.rename</code></td><td><code>ctrl+r</code></td><td>重命名会话</td></tr>
+<tr><td><code>session.delete</code></td><td><code>ctrl+d</code></td><td>删除会话</td></tr>
+<tr><td><code>session.interrupt</code></td><td><code>escape</code></td><td>中断当前会话</td></tr>
+<tr><td><code>session.background</code></td><td><code>ctrl+b</code></td><td>把阻塞中的会话工具转入后台</td></tr>
+<tr><td><code>session.compact</code></td><td><code>&lt;leader&gt;c</code></td><td>压缩会话</td></tr>
+<tr><td><code>session.aside</code></td><td><code>none</code></td><td>提一个边问（side question）</td></tr>
+<tr><td><code>session.cd</code></td><td><code>none</code></td><td>更改工作目录</td></tr>
+<tr><td><code>session.queued_prompts</code></td><td><code>&lt;leader&gt;q</code></td><td>管理排队中的 prompt</td></tr>
+<tr><td><code>queued_prompt.undo</code></td><td><code>ctrl+u</code></td><td>撤销排队中的 prompt</td></tr>
+<tr><td><code>queued_prompt.delete</code></td><td><code>ctrl+d</code></td><td>删除排队中的 prompt</td></tr>
+<tr><td><code>session.toggle.exploration_grouping</code></td><td><code>none</code></td><td>切换相关工具调用的分组显示</td></tr>
+<tr><td><code>session.verbosity.cycle</code></td><td><code>none</code></td><td>循环切换对话记录详略程度</td></tr>
+<tr><td><code>session.child.first</code></td><td><code>down</code></td><td>切换子 agent 选择器</td></tr>
+<tr><td><code>session.child.next</code></td><td><code>right</code></td><td>前往下一个子会话</td></tr>
+<tr><td><code>session.child.previous</code></td><td><code>left</code></td><td>前往上一个子会话</td></tr>
+<tr><td><code>session.parent</code></td><td><code>up</code></td><td>返回父会话</td></tr>
+<tr><td><code>session.pin.toggle</code></td><td><code>ctrl+f</code></td><td>在会话列表中置顶或取消置顶会话</td></tr>
+<tr><td><code>session.quick_switch.1</code></td><td><code>&lt;leader&gt;1</code></td><td>切到快速槽位 1 的会话</td></tr>
+<tr><td><code>session.quick_switch.2</code></td><td><code>&lt;leader&gt;2</code></td><td>切到快速槽位 2 的会话</td></tr>
+<tr><td><code>session.quick_switch.3</code></td><td><code>&lt;leader&gt;3</code></td><td>切到快速槽位 3 的会话</td></tr>
+<tr><td><code>session.quick_switch.4</code></td><td><code>&lt;leader&gt;4</code></td><td>切到快速槽位 4 的会话</td></tr>
+<tr><td><code>session.quick_switch.5</code></td><td><code>&lt;leader&gt;5</code></td><td>切到快速槽位 5 的会话</td></tr>
+<tr><td><code>session.quick_switch.6</code></td><td><code>&lt;leader&gt;6</code></td><td>切到快速槽位 6 的会话</td></tr>
+<tr><td><code>session.quick_switch.7</code></td><td><code>&lt;leader&gt;7</code></td><td>切到快速槽位 7 的会话</td></tr>
+<tr><td><code>session.quick_switch.8</code></td><td><code>&lt;leader&gt;8</code></td><td>切到快速槽位 8 的会话</td></tr>
+<tr><td><code>session.quick_switch.9</code></td><td><code>&lt;leader&gt;9</code></td><td>切到快速槽位 9 的会话</td></tr>
+<tr><td><code>session.tab.select.1</code></td><td><code>&lt;leader&gt;1,ctrl+1</code></td><td>切到会话标签页 1</td></tr>
+<tr><td><code>session.tab.select.2</code></td><td><code>&lt;leader&gt;2,ctrl+2</code></td><td>切到会话标签页 2</td></tr>
+<tr><td><code>session.tab.select.3</code></td><td><code>&lt;leader&gt;3,ctrl+3</code></td><td>切到会话标签页 3</td></tr>
+<tr><td><code>session.tab.select.4</code></td><td><code>&lt;leader&gt;4,ctrl+4</code></td><td>切到会话标签页 4</td></tr>
+<tr><td><code>session.tab.select.5</code></td><td><code>&lt;leader&gt;5,ctrl+5</code></td><td>切到会话标签页 5</td></tr>
+<tr><td><code>session.tab.select.6</code></td><td><code>&lt;leader&gt;6,ctrl+6</code></td><td>切到会话标签页 6</td></tr>
+<tr><td><code>session.tab.select.7</code></td><td><code>&lt;leader&gt;7,ctrl+7</code></td><td>切到会话标签页 7</td></tr>
+<tr><td><code>session.tab.select.8</code></td><td><code>&lt;leader&gt;8,ctrl+8</code></td><td>切到会话标签页 8</td></tr>
+<tr><td><code>session.tab.select.9</code></td><td><code>&lt;leader&gt;9,ctrl+9</code></td><td>切到会话标签页 9</td></tr>
+<tr><td><code>session.tab.select.10</code></td><td><code>&lt;leader&gt;0,ctrl+0</code></td><td>切到会话标签页 10</td></tr>
+</tbody>
+</table>
+
+<h2>模型与 Agent</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>stash.delete</code></td><td><code>ctrl+d</code></td><td>删除暂存（stash）条目</td></tr>
+<tr><td><code>model.dialog.provider</code></td><td><code>ctrl+a</code></td><td>从模型对话框打开提供商列表</td></tr>
+<tr><td><code>model.dialog.favorite</code></td><td><code>ctrl+f</code></td><td>切换模型收藏状态</td></tr>
+<tr><td><code>model.dialog.usage</code></td><td><code>ctrl+u</code></td><td>从模型对话框打开用量限制</td></tr>
+<tr><td><code>model.list</code></td><td><code>&lt;leader&gt;m</code></td><td>列出可用模型</td></tr>
+<tr><td><code>model.cycle_recent</code></td><td><code>f2</code></td><td>下一个最近使用的模型</td></tr>
+<tr><td><code>model.cycle_recent_reverse</code></td><td><code>shift+f2</code></td><td>上一个最近使用的模型</td></tr>
+<tr><td><code>model.cycle_favorite</code></td><td><code>none</code></td><td>下一个收藏的模型</td></tr>
+<tr><td><code>model.cycle_favorite_reverse</code></td><td><code>none</code></td><td>上一个收藏的模型</td></tr>
+<tr><td><code>mcp.list</code></td><td><code>none</code></td><td>列出 MCP 服务器</td></tr>
+<tr><td><code>usage.show</code></td><td><code>none</code></td><td>查看用量限制</td></tr>
+<tr><td><code>provider.connect</code></td><td><code>none</code></td><td>连接集成</td></tr>
+<tr><td><code>agent.list</code></td><td><code>&lt;leader&gt;a</code></td><td>列出 agent</td></tr>
+<tr><td><code>agent.cycle</code></td><td><code>shift+tab</code></td><td>下一个 agent</td></tr>
+<tr><td><code>agent.cycle.reverse</code></td><td><code>none</code></td><td>上一个 agent</td></tr>
+<tr><td><code>variant.cycle</code></td><td><code>ctrl+t</code></td><td>循环切换模型 variant</td></tr>
+<tr><td><code>variant.list</code></td><td><code>none</code></td><td>列出模型 variant</td></tr>
+</tbody>
+</table>
+
+<h2>会话内导航</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>session.page.up</code></td><td><code>pageup,ctrl+alt+b</code></td><td>消息向上滚动一页</td></tr>
+<tr><td><code>session.page.down</code></td><td><code>pagedown,ctrl+alt+f</code></td><td>消息向下滚动一页</td></tr>
+<tr><td><code>session.line.up</code></td><td><code>ctrl+alt+y</code></td><td>消息向上滚动一行</td></tr>
+<tr><td><code>session.line.down</code></td><td><code>ctrl+alt+e</code></td><td>消息向下滚动一行</td></tr>
+<tr><td><code>session.half.page.up</code></td><td><code>ctrl+alt+u</code></td><td>消息向上滚动半页</td></tr>
+<tr><td><code>session.half.page.down</code></td><td><code>ctrl+alt+d</code></td><td>消息向下滚动半页</td></tr>
+<tr><td><code>session.first</code></td><td><code>ctrl+g,home,alt+home</code></td><td>跳到第一条消息</td></tr>
+<tr><td><code>session.last</code></td><td><code>ctrl+alt+g,end</code></td><td>跳到最后一条消息</td></tr>
+<tr><td><code>session.message.next</code></td><td><code>none</code></td><td>前往下一条消息</td></tr>
+<tr><td><code>session.message.previous</code></td><td><code>none</code></td><td>前往上一条消息</td></tr>
+<tr><td><code>session.message.user.next</code></td><td><code>none</code></td><td>前往下一条用户消息</td></tr>
+<tr><td><code>session.message.user.previous</code></td><td><code>none</code></td><td>前往上一条用户消息</td></tr>
+<tr><td><code>session.messages_last_user</code></td><td><code>alt+end</code></td><td>前往最后一条用户消息</td></tr>
+<tr><td><code>messages.copy</code></td><td><code>&lt;leader&gt;y</code></td><td>复制消息</td></tr>
+<tr><td><code>session.undo</code></td><td><code>&lt;leader&gt;u</code></td><td>撤销消息</td></tr>
+<tr><td><code>session.redo</code></td><td><code>&lt;leader&gt;r</code></td><td>重做消息</td></tr>
+<tr><td><code>session.toggle.thinking</code></td><td><code>none</code></td><td>切换思考块的显示与隐藏</td></tr>
+</tbody>
+</table>
+
+<h2>Prompt 命令</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>prompt.submit</code></td><td><code>none</code></td><td>提交 prompt</td></tr>
+<tr><td><code>prompt.queue</code></td><td><code>&lt;leader&gt;return</code></td><td>把 prompt 排入队列</td></tr>
+<tr><td><code>prompt.editor_context.clear</code></td><td><code>none</code></td><td>清空编辑器上下文</td></tr>
+<tr><td><code>prompt.images.view</code></td><td><code>&lt;leader&gt;i</code></td><td>查看图片附件</td></tr>
+<tr><td><code>prompt.skills</code></td><td><code>none</code></td><td>打开 skill 选择器</td></tr>
+<tr><td><code>prompt.stash</code></td><td><code>none</code></td><td>暂存 prompt</td></tr>
+<tr><td><code>prompt.stash.pop</code></td><td><code>none</code></td><td>弹出已暂存的 prompt</td></tr>
+<tr><td><code>prompt.stash.list</code></td><td><code>none</code></td><td>列出已暂存的 prompt</td></tr>
+</tbody>
+</table>
+
+<h2>输入编辑</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>prompt.clear</code></td><td><code>ctrl+c</code></td><td>清空输入框</td></tr>
+<tr><td><code>prompt.paste</code></td><td><code>{"key":"ctrl+v","preventDefault":false}</code>（<code>ctrl+v</code>；<code>preventDefault: false</code>）</td><td>从剪贴板粘贴</td></tr>
+<tr><td><code>input.submit</code></td><td><code>return</code></td><td>提交输入</td></tr>
+<tr><td><code>input.newline</code></td><td><code>shift+return,ctrl+return,alt+return,ctrl+j</code></td><td>在输入中插入换行</td></tr>
+<tr><td><code>input.move.left</code></td><td><code>left,ctrl+b</code></td><td>光标左移</td></tr>
+<tr><td><code>input.move.right</code></td><td><code>right,ctrl+f</code></td><td>光标右移</td></tr>
+<tr><td><code>input.move.up</code></td><td><code>up</code></td><td>光标上移</td></tr>
+<tr><td><code>input.move.down</code></td><td><code>down</code></td><td>光标下移</td></tr>
+<tr><td><code>input.select.left</code></td><td><code>shift+left</code></td><td>向左选择</td></tr>
+<tr><td><code>input.select.right</code></td><td><code>shift+right</code></td><td>向右选择</td></tr>
+<tr><td><code>input.select.up</code></td><td><code>shift+up</code></td><td>向上选择</td></tr>
+<tr><td><code>input.select.down</code></td><td><code>shift+down</code></td><td>向下选择</td></tr>
+<tr><td><code>input.line.home</code></td><td><code>ctrl+a</code></td><td>移到逻辑行首</td></tr>
+<tr><td><code>input.line.end</code></td><td><code>ctrl+e</code></td><td>移到逻辑行尾</td></tr>
+<tr><td><code>input.select.line.home</code></td><td><code>ctrl+shift+a</code></td><td>选择到逻辑行首</td></tr>
+<tr><td><code>input.select.line.end</code></td><td><code>ctrl+shift+e</code></td><td>选择到逻辑行尾</td></tr>
+<tr><td><code>input.visual.line.home</code></td><td><code>alt+a</code></td><td>移到可视行（visual line）行首</td></tr>
+<tr><td><code>input.visual.line.end</code></td><td><code>alt+e</code></td><td>移到可视行行尾</td></tr>
+<tr><td><code>input.select.visual.line.home</code></td><td><code>alt+shift+a</code></td><td>选择到可视行行首</td></tr>
+<tr><td><code>input.select.visual.line.end</code></td><td><code>alt+shift+e</code></td><td>选择到可视行行尾</td></tr>
+<tr><td><code>input.buffer.home</code></td><td><code>none</code></td><td>移到输入缓冲区开头</td></tr>
+<tr><td><code>input.buffer.end</code></td><td><code>none</code></td><td>移到输入缓冲区末尾</td></tr>
+<tr><td><code>input.select.buffer.home</code></td><td><code>shift+home</code></td><td>选择到输入缓冲区开头</td></tr>
+<tr><td><code>input.select.buffer.end</code></td><td><code>shift+end</code></td><td>选择到输入缓冲区末尾</td></tr>
+<tr><td><code>input.delete.line</code></td><td><code>ctrl+shift+d</code></td><td>删除整行</td></tr>
+<tr><td><code>input.delete.to.line.end</code></td><td><code>ctrl+k</code></td><td>删除到行尾</td></tr>
+<tr><td><code>input.delete.to.line.start</code></td><td><code>ctrl+u</code></td><td>删除到行首</td></tr>
+<tr><td><code>input.backspace</code></td><td><code>backspace,shift+backspace</code></td><td>退格</td></tr>
+<tr><td><code>input.delete</code></td><td><code>ctrl+d,delete,shift+delete</code></td><td>删除一个字符</td></tr>
+<tr><td><code>input.undo</code></td><td><code>ctrl+-,super+z</code></td><td>输入撤销</td></tr>
+<tr><td><code>input.redo</code></td><td><code>ctrl+.,super+shift+z</code></td><td>输入重做</td></tr>
+<tr><td><code>input.word.forward</code></td><td><code>alt+f,alt+right,ctrl+right</code></td><td>向前移动一个词</td></tr>
+<tr><td><code>input.word.backward</code></td><td><code>alt+b,alt+left,ctrl+left</code></td><td>向后移动一个词</td></tr>
+<tr><td><code>input.select.word.forward</code></td><td><code>alt+shift+f,alt+shift+right</code></td><td>向前选择一个词</td></tr>
+<tr><td><code>input.select.word.backward</code></td><td><code>alt+shift+b,alt+shift+left</code></td><td>向后选择一个词</td></tr>
+<tr><td><code>input.delete.word.forward</code></td><td><code>alt+d,alt+delete,ctrl+delete</code></td><td>向前删除一个词</td></tr>
+<tr><td><code>input.delete.word.backward</code></td><td><code>ctrl+w,ctrl+backspace,alt+backspace</code></td><td>向后删除一个词</td></tr>
+<tr><td><code>input.select.all</code></td><td><code>super+a</code></td><td>全选输入内容</td></tr>
+<tr><td><code>prompt.history.previous</code></td><td><code>up</code></td><td>上一条历史记录</td></tr>
+<tr><td><code>prompt.history.next</code></td><td><code>down</code></td><td>下一条历史记录</td></tr>
+</tbody>
+</table>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「逻辑行」和「可视行」的区别来自编辑器的老传统：当一行太长在屏幕上折成多行显示时，<kbd>Ctrl+E</kbd>（logical end）一步跳到整行的真正末尾，而 <kbd>Alt+E</kbd>（visual end）只跳到当前屏幕行的末尾。写长 prompt、在窗口边缘来回跳时会明显感觉到差别。<code>super</code> 指 macOS 的 Command 键。</p>
+</aside>
+
+<h2>Composer</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>composer.subagent.up</code></td><td><code>up</code></td><td>上一个子 agent</td></tr>
+<tr><td><code>composer.subagent.down</code></td><td><code>down</code></td><td>下一个子 agent</td></tr>
+<tr><td><code>composer.subagent.select</code></td><td><code>return</code></td><td>前往该子 agent</td></tr>
+<tr><td><code>composer.subagent.interrupt</code></td><td><code>ctrl+d</code></td><td>中断子 agent</td></tr>
+<tr><td><code>composer.shell.up</code></td><td><code>up</code></td><td>上一个 shell</td></tr>
+<tr><td><code>composer.shell.down</code></td><td><code>down</code></td><td>下一个 shell</td></tr>
+<tr><td><code>composer.shell.select</code></td><td><code>return</code></td><td>查看 shell 输出</td></tr>
+<tr><td><code>composer.shell.kill</code></td><td><code>ctrl+d</code></td><td>终止 shell 命令</td></tr>
+<tr><td><code>composer.terminal.up</code></td><td><code>up,k</code></td><td>上一个终端</td></tr>
+<tr><td><code>composer.terminal.down</code></td><td><code>down,j</code></td><td>下一个终端</td></tr>
+<tr><td><code>composer.terminal.select</code></td><td><code>return</code></td><td>选中终端</td></tr>
+</tbody>
+</table>
+<p>在 <strong>Shell</strong> 标签页里选中一个正在运行的命令并按 <kbd>Enter</kbd>（或点击它），可以查看捕获到的 stdout 和 stderr。用 <kbd>↑/↓</kbd>、<kbd>Page Up/Down</kbd> 或 <kbd>Home</kbd> 滚动；按 <kbd>End</kbd> 跟随新输出；按 <kbd>Esc</kbd> 返回但不停掉命令。查看器显示最近的输出，命令退出后依然保持打开；重定向到文件的输出不包含在内。</p>
+
+<h2>对话框与自动补全</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>dialog.select.prev</code></td><td><code>up,ctrl+p</code></td><td>移到上一个对话框条目</td></tr>
+<tr><td><code>dialog.select.next</code></td><td><code>down,ctrl+n</code></td><td>移到下一个对话框条目</td></tr>
+<tr><td><code>dialog.select.page_up</code></td><td><code>pageup</code></td><td>对话框内向上翻一页</td></tr>
+<tr><td><code>dialog.select.page_down</code></td><td><code>pagedown</code></td><td>对话框内向下翻一页</td></tr>
+<tr><td><code>dialog.select.home</code></td><td><code>home</code></td><td>移到第一个对话框条目</td></tr>
+<tr><td><code>dialog.select.end</code></td><td><code>end</code></td><td>移到最后一个对话框条目</td></tr>
+<tr><td><code>dialog.select.submit</code></td><td><code>return</code></td><td>提交选中的对话框条目</td></tr>
+<tr><td><code>dialog.prompt.submit</code></td><td><code>return</code></td><td>提交对话框 prompt</td></tr>
+<tr><td><code>dialog.integration.rename</code></td><td><code>ctrl+r</code></td><td>重命名集成账号</td></tr>
+<tr><td><code>dialog.integration.delete</code></td><td><code>ctrl+d</code></td><td>删除集成账号</td></tr>
+<tr><td><code>dialog.integration.copy</code></td><td><code>tab</code></td><td>复制授权链接</td></tr>
+<tr><td><code>dialog.worktree.generate</code></td><td><code>tab</code></td><td>生成 worktree 名称</td></tr>
+<tr><td><code>dialog.move_session.new</code></td><td><code>ctrl+a</code></td><td>新建 worktree</td></tr>
+<tr><td><code>dialog.move_session.move</code></td><td><code>ctrl+m</code></td><td>把会话移到 worktree</td></tr>
+<tr><td><code>dialog.move_session.delete</code></td><td><code>ctrl+d</code></td><td>删除 worktree</td></tr>
+<tr><td><code>dialog.move_session.refresh</code></td><td><code>ctrl+r</code></td><td>刷新 worktree 列表</td></tr>
+<tr><td><code>prompt.autocomplete.prev</code></td><td><code>up,ctrl+p</code></td><td>移到上一个自动补全项</td></tr>
+<tr><td><code>prompt.autocomplete.next</code></td><td><code>down,ctrl+n</code></td><td>移到下一个自动补全项</td></tr>
+<tr><td><code>prompt.autocomplete.hide</code></td><td><code>escape</code></td><td>隐藏自动补全</td></tr>
+<tr><td><code>prompt.autocomplete.select</code></td><td><code>return</code></td><td>选中自动补全项</td></tr>
+<tr><td><code>prompt.autocomplete.complete</code></td><td><code>tab</code></td><td>补全自动补全项</td></tr>
+<tr><td><code>permission.prompt.fullscreen</code></td><td><code>ctrl+f</code></td><td>切换权限提示全屏</td></tr>
+<tr><td><code>plugins.toggle</code></td><td><code>return</code></td><td>启用 / 禁用插件</td></tr>
+<tr><td><code>dialog.mcp.toggle</code></td><td><code>space</code></td><td>启用 / 禁用 MCP 服务器</td></tr>
+<tr><td><code>dialog.plugins.error</code></td><td><code>space</code></td><td>查看插件错误</td></tr>
+<tr><td><code>dialog.plugins.update</code></td><td><code>ctrl+u</code></td><td>从插件对话框更新插件</td></tr>
+<tr><td><code>dialog.plugins.check</code></td><td><code>ctrl+r</code></td><td>检查插件更新</td></tr>
+</tbody>
+</table>
+
+<h2>终端与插件</h2>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>terminal.suspend</code></td><td><code>ctrl+z</code></td><td>挂起终端</td></tr>
+<tr><td><code>terminal.title.toggle</code></td><td><code>none</code></td><td>切换终端标题更新</td></tr>
+<tr><td><code>plugins.list</code></td><td><code>none</code></td><td>打开插件管理对话框</td></tr>
+</tbody>
+</table>
+
+<h2>Which-Key</h2>
+<p>Which-Key 面板类似 vim 的同名插件：按下前导键后弹出一览，提示当前前缀下所有可用组合。</p>
+<table>
+<thead><tr><th>ID</th><th>默认绑定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>which-key.toggle</code></td><td><code>ctrl+alt+k</code></td><td>切换 which-key 面板</td></tr>
+<tr><td><code>which-key.layout.toggle</code></td><td><code>ctrl+alt+shift+k</code></td><td>切换 which-key 布局</td></tr>
+<tr><td><code>which-key.pending.toggle</code></td><td><code>ctrl+alt+shift+p</code></td><td>切换 which-key 待决预览</td></tr>
+<tr><td><code>which-key.group.previous</code></td><td><code>ctrl+alt+left,ctrl+alt+[</code></td><td>上一个 which-key 分组</td></tr>
+<tr><td><code>which-key.group.next</code></td><td><code>ctrl+alt+right,ctrl+alt+]</code></td><td>下一个 which-key 分组</td></tr>
+<tr><td><code>which-key.scroll.up</code></td><td><code>ctrl+alt+up,ctrl+alt+p</code></td><td>which-key 向上滚动</td></tr>
+<tr><td><code>which-key.scroll.down</code></td><td><code>ctrl+alt+down,ctrl+alt+n</code></td><td>which-key 向下滚动</td></tr>
+<tr><td><code>which-key.page.up</code></td><td><code>ctrl+alt+pageup</code></td><td>which-key 向上翻页</td></tr>
+<tr><td><code>which-key.page.down</code></td><td><code>ctrl+alt+pagedown</code></td><td>which-key 向下翻页</td></tr>
+<tr><td><code>which-key.home</code></td><td><code>ctrl+alt+home</code></td><td>跳到第一个 which-key 绑定</td></tr>
+<tr><td><code>which-key.end</code></td><td><code>ctrl+alt+end</code></td><td>跳到最后一个 which-key 绑定</td></tr>
+</tbody>
+</table>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>不背表也没关系：忘了某个键位时按 <kbd>Ctrl+Alt+K</kbd> 打开 Which-Key 面板现场查，或按 <kbd>?</kbd>（<code>diff.help</code>）查看 diff 视图的专属快捷键。想把常用操作改成 vim 风格（例如把 j/k 上下滚动扩展到会话视图），只需要在本页表格里找到对应 ID，写进 <code>cli.json</code> 覆盖即可——TUI 运行期间保存会热重载。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

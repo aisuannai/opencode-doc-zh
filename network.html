@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网络 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="network" data-group="配置" data-src="https://opencode.ai/docs/network/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>网络</h1>
+<p class="lede">在公司代理、自签名证书、杀毒软件 HTTPS 拦截这些环境下 OpenCode 连不上模型？这一页讲清楚怎么设置代理变量、信任企业证书、配置客户端证书，以及如何验证连通。</p>
+
+<h2>基础代理设置</h2>
+<p>设置标准的代理变量并排除回环地址（loopback）。OpenCode 在 CLI 和后台服务之间使用本地 HTTP 连接，所以在 CLI 环境里配置了代理时，<strong>回环排除是必需的</strong>：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,::1
+
+opencode</code></pre>
+
+<p><code>HTTP_PROXY</code> 处理 HTTP 目标，<code>HTTPS_PROXY</code> 处理 HTTPS 目标。代理 URL 本身对两个变量都可以用 <code>http://</code>。<code>NO_PROXY</code> 是一个逗号分隔的主机和地址列表，它们直连不走代理。</p>
+
+<h2>后台服务（Service）</h2>
+<p>shell 里 export 的变量只有当后台服务<strong>从那个 shell 启动</strong>时才对它生效。把变量持久化到托管服务配置里，以后每次启动服务都会用同样的网络设置：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service start</code></pre>
+
+<p>修改托管环境变量会<strong>停止</strong>正在运行的服务；<code>service start</code> 会用新环境重新启动。当 CLI 所在的 shell 设置了代理时，记得在 shell 里也保留 <code>NO_PROXY</code>——因为托管服务的变量只作用于服务器进程，不作用于 CLI 进程。</p>
+
+<p>用 <code>service unset env</code> 移除一个持久化的变量：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service unset env HTTPS_PROXY</code></pre>
+
+<h2>代理认证（Authentication）</h2>
+<p>对于接受 URL 凭据的代理，把用户名和密码写进每个需要认证的代理 URL。凭据中的 <code>@</code>、<code>:</code>、<code>/</code> 等字符要做百分号编码：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'</code></pre>
+
+<p>对后台服务，要持久化完整的 URL。该值保存在私有的服务配置中，并且可以通过 <code>opencode service get env</code> 查看——所以<strong>不要把那个输出分享出去</strong>：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'</code></pre>
+
+<h2>证书（Certificates）</h2>
+<p>当代理或目标服务器使用由私有证书机构（CA）签发的证书时，把 <code>NODE_EXTRA_CA_CERTS</code> 指向一个 PEM 文件。进程启动时，这些额外的证书机构会被加入运行时信任库：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone</code></pre>
+
+<p>给后台服务持久化文件路径，然后重启：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start</code></pre>
+
+<h2>杀毒软件与 HTTPS 检查</h2>
+<p>杀毒软件的「HTTPS 扫描」或「加密连接扫描」（Kaspersky、Avast、ESET 等）以及企业级 SSL 检查代理，会把服务器的证书换成它们自己的。OpenCode 会拒绝这种证书，请求失败并报类似这样的错：</p>
+
+<div class="term-head"><span>text</span><span>典型报错</span></div>
+<pre><code>self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE</code></pre>
+
+<p>两种修复方式任选其一：</p>
+<ul>
+<li>在杀毒软件设置里，把 <code>opencode.ai</code> 和 <code>*.opencode.ai</code> 排除出 HTTPS 扫描。如果直连某个模型提供商，把它 API 的主机也加上，如 <code>api.anthropic.com</code>。</li>
+<li>把检查用的证书机构导出为 PEM 文件，用 <code>NODE_EXTRA_CA_CERTS</code> 信任它，见上文「证书」一节。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>看到 <code>SELF_SIGNED_CERT_IN_CHAIN</code> 这类报错，第一反应不该是「关掉证书校验」，而是搞清楚是谁在中间换了证书。公司机器上几乎都是杀毒软件或 SSL 检查代理干的，按上面两种方式处理即可；<strong>不要</strong>用 <code>NODE_TLS_REJECT_UNAUTHORIZED=0</code> 之类的方式绕过校验，那会让所有连接失去中间人防护。</p>
+</aside>
+
+<h2>客户端证书（Client certificates）</h2>
+<p>当提供商的网关要求双向 TLS（mTLS）时，在该提供商上设置 <code>settings.tls</code>。它的模型请求会出示客户端证书，TLS 握手只会把证书发给请求证书的服务器：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<ul>
+<li><code>cert</code> 和 <code>key</code> 是 PEM 文本。用 <code>{file:...}</code> 从文件读取。文件读不到时 <code>tls</code> 保持未设置。</li>
+<li><code>passphrase</code> 只在密钥加密时需要。</li>
+<li>在 Bun 和 Node 构建上可用。跑在 Cloudflare Workers 上的服务器无法通过 <code>fetch</code> 出示客户端证书。</li>
+<li>带客户端证书的请求<strong>不跟随重定向</strong>，所以证书不会发给另一个主机。</li>
+</ul>
+
+<p>该提供商的每个模型请求都会出示证书：chat、compaction、图像和决策模型都算。设置了 <code>tls</code> 的提供商用 HTTP 而不是 WebSocket。webfetch、远程 MCP 服务器、插件安装等工具<strong>不</strong>出示它。</p>
+
+<h2>前台进程（Foreground）</h2>
+<p><code>--standalone</code> 和 <code>serve</code> 使用自己进程的环境变量，<code>opencode service set env</code> <strong>不会</strong>配置这些进程：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode --standalone</code></pre>
+
+<p>对前台服务器套用同样的模式：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode serve</code></pre>
+
+<h2>验证（Verify）</h2>
+<p>应用设置后，先确认 CLI 能连上后台服务：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode api get /api/info</code></pre>
+
+<p>健康检查成功说明「CLI → 服务」这一段本地连接是通的。再跑一次正常的提供商请求，验证「服务 → 外网」的出站代理和证书链路。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>排查网络问题时把它想成两段水管：第一段是「CLI ↔ 本机后台服务」（永远走 localhost，所以代理变量一设置就可能把它也劫走——这就是必须配 <code>NO_PROXY</code> 的原因）；第二段是「后台服务 ↔ 互联网」（走你的代理和证书）。先用 <code>opencode api get /api/info</code> 验第一段，再用真实请求验第二段，坏在哪一段一眼就知道。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

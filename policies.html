@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>策略 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="policies" data-group="配置" data-src="https://opencode.ai/docs/policies/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>策略</h1>
+<p class="lede">策略（Policy）决定 OpenCode 是否可以对某个具名资源执行动作。它们写在 <code>policies</code> 配置下，也可以由已连接的 <a href="console.html">OpenCode Console</a> 工作区下发。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>策略和权限是两套不同层级的门禁：<strong>权限</strong>是「保姆级的规则」——针对具体工具动作，可以弹窗询问你；<strong>策略</strong>是「铁闸门」——一刀切、从不弹窗，只收紧不放宽。策略适合场景：公司统一规定「谁都不许用 OpenAI」「不许执行 git push」——这种要求要能压过用户和项目自己的配置，就必须用策略。</p>
+</aside>
+
+<p>策略独立于<a href="permissions.html">权限</a>。权限是按智能体（agent）生效的工具规则，可以有 <code>allow</code>、<code>deny</code>、<code>ask</code> 三种结果。策略是二元的、从不提示，且只会收紧权限和提供商原本允许的范围。</p>
+
+<h2>配置</h2>
+<p>在 <code>opencode.jsonc</code> 里加一条语句，就能在所有地方禁用一个提供商：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}</code></pre>
+<p>被禁用的提供商会从目录和模型选择里消失，即使它有有效凭证。</p>
+<p>早期版本从 <code>experimental.policies</code> 读取策略。该键仍然有效，并会合并进 <code>policies</code>：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}</code></pre>
+
+<h2>语句</h2>
+<p>每条语句有三个字段：</p>
+<table>
+<thead>
+<tr><th>字段</th><th>取值</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td><code>action</code></td><td><code>provider.use</code>、<code>tool.use</code>、<code>integration.connect</code>、<code>integration.use</code>、<code>mcp.use</code>、<code>skill.use</code>、<code>plugin.use</code>、<code>websearch.use</code></td><td>被控制的操作</td></tr>
+<tr><td><code>resource</code></td><td>字符串或通配符模式</td><td>语句适用的对象；取决于 action</td></tr>
+<tr><td><code>effect</code></td><td><code>allow</code>、<code>deny</code></td><td>语句命中时的决定</td></tr>
+</tbody>
+</table>
+<p>校验失败的语句会被丢弃，并在服务器日志里给出警告；列表里其余语句仍然生效。编辑 <code>deny</code> 之后记得查看日志。</p>
+
+<h2>匹配</h2>
+<p>资源使用与权限相同的整值通配符：<code>*</code> 匹配零个或多个字符，<code>?</code> 匹配一个。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}</code></pre>
+<p>这会禁用 <code>company-us</code> 和 <code>company-eu</code>。以 <code> *</code> 结尾的模式还匹配不带参数的值本身，所以 <code>shell:git push *</code> 同时覆盖单独的 <code>git push</code>。</p>
+
+<h2>顺序</h2>
+<p>多条语句同时命中时，<strong>最后一条胜出</strong>。没有「越具体越优先」的规则，所以把宽泛的语句放前面、例外放后面。什么都没命中时，动作默认允许。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}</code></pre>
+<p>这样只有 Anthropic 可用。</p>
+
+<h2>提供商</h2>
+<p><code>provider.use</code> 控制一个提供商是否可用。资源是提供商 ID：<code>anthropic</code>、<code>openai</code>、<code>opencode</code>，或 <a href="providers.html">Providers</a>里定义的自定义 ID：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}</code></pre>
+<p><code>providers</code> 条目负责配置端点；策略语句则让它成为 OpenCode 唯一会用的提供商。无论提供商从哪条途径被引入——目录数据、环境变量、已保存的账号、内置插件或配置文件——策略都会生效。</p>
+<p>请用 <code>provider.use</code> 取代 V1 的 <code>enabled_providers</code> 和 <code>disabled_providers</code> 列表。V1 文件仍然能加载；见 <a href="migrate-v1.html">从 V1 迁移</a>。</p>
+
+<h2>工具</h2>
+<p><code>tool.use</code> 语句对<a href="permissions.html">权限</a>检查做硬性拒绝。资源是 <code>&lt;action&gt;:&lt;value&gt;</code>，与工具检查的每个资源进行匹配：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}</code></pre>
+<p>被拒绝的检查直接以 <code>Blocked by configuration policy</code> 失败，而不是弹窗询问。它在智能体规则和保存的批准<strong>之后</strong>生效，所以既能压过 <code>ask</code>，也能压过「总是允许（Allow always）」的批准。</p>
+<table>
+<thead>
+<tr><th>模式</th><th>拦截内容</th></tr>
+</thead>
+<tbody>
+<tr><td><code>shell:*</code></td><td>所有 shell 命令</td></tr>
+<tr><td><code>read:*/.ssh/*</code></td><td>读取 SSH 相关材料</td></tr>
+<tr><td><code>external_directory:*</code></td><td>任何超出 Location 或 worktree 的访问</td></tr>
+<tr><td><code>subagent:general</code></td><td>启动某个子智能体</td></tr>
+<tr><td><code>github_delete_repository:*</code></td><td>某个 MCP 工具</td></tr>
+<tr><td><code>*</code></td><td>所有尚未被拒绝的动作</td></tr>
+</tbody>
+</table>
+<p><code>tool.use</code> 的 <code>allow</code> 永远<strong>不会</strong>授予访问权限，它只是解除更早的一条更宽的 <code>deny</code>，之后仍由智能体自己的规则说了算：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}</code></pre>
+<p>这样 <code>git status</code> 会回落到智能体的 <code>shell</code> 权限规则；其它所有命令都被拦截。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>策略只能「收紧」不能「放宽」：<code>tool.use</code> 的 <code>allow</code> 只是解除前面的 deny，真正的访问与否仍由权限规则决定。别指望写一条 policy allow 就能绕过权限的 ask——那是两套体系。</p>
+</aside>
+
+<h2>集成</h2>
+<p>集成（integration）指你在 <code>/connect</code> 里连接的任何东西：OpenCode Console（<code>opencode</code>）、某个提供商（如 <code>anthropic</code>）、某个网页搜索服务（如 <code>exa</code>），或知名的配置来源（如 <code>https://ai.acme.com</code>）。登录 MCP 服务器不受集成策略影响；要控制 MCP 服务器请用 <code>mcp.use</code>。</p>
+<p><code>integration.connect</code> 控制 <code>/connect</code> 列出哪些集成、哪些可以连接。资源是集成 ID。</p>
+<p><code>integration.use</code> 控制一个集成提供的一切：它的提供商和模型、它的网页搜索，以及 Console 工作区或知名来源下发的 MCP 服务器和配置。资源是 <code>&lt;integration&gt;#&lt;account&gt;</code>，account 是连接的组织或账号 ID，如 <code>opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1</code>。没有连接账号时，资源就是裸的集成 ID：未登录的免费版是 <code>opencode</code>，环境变量里有 <code>ANTHROPIC_API_KEY</code> 是 <code>anthropic</code>，<code>opencode.json</code> 里的提供商则是其提供商 ID。</p>
+<p>下面这条 MDM 策略要求「只用一个 Console 工作区，其它一概不要」：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}</code></pre>
+<p>这样 <code>/connect</code> 只提供 Console 让成员登录。免费版、个人 Console 账号、其它组织、环境变量里的 API key、<code>opencode.json</code> 里的提供商——全部不可用。工作区的提供商、MCP 服务器和网页搜索正常工作，在 Console 里改动它们也不需要发新的 MDM 配置文件。</p>
+<p>只有托管策略（managed policies）可以扣留集成下发的 MCP 服务器和配置；无论哪种情况，集成自身的策略都继续适用。</p>
+
+<h2>MCP、技能与插件</h2>
+<table>
+<thead>
+<tr><th>动作</th><th>资源</th></tr>
+</thead>
+<tbody>
+<tr><td><code>mcp.use</code></td><td><a href="mcp-servers.html">MCP 服务器</a>，按其配置名称</td></tr>
+<tr><td><code>skill.use</code></td><td><a href="skills.html">技能</a>，按其 ID</td></tr>
+<tr><td><code>plugin.use</code></td><td><a href="plugins.html">插件</a>，按不带版本号的包名或绝对路径</td></tr>
+</tbody>
+</table>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
+  ],
+}</code></pre>
+<p>被禁用的 MCP 服务器或技能会被移除，被禁用的插件不会被加载——无论它是怎么配置进来的。</p>
+
+<h3>从 <code>integration.use</code> 升级</h3>
+<p>在 OpenCode 2.2.3 之前，<code>integration.use</code> 通过 <code>mcp:</code>、<code>skill:</code>、<code>plugin:</code> 前缀覆盖 MCP 服务器、技能和插件。带前缀的语句仍然加载，并被转换成 <code>mcp.use</code>、<code>skill.use</code> 或 <code>plugin.use</code>。</p>
+<p>没有这些前缀的语句（包括裸 <code>*</code>）现在改指集成。像这样一条宽泛的 deny：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{ "action": "integration.use", "resource": "*", "effect": "deny" }</code></pre>
+<p>不再拦截 MCP 服务器、技能或插件。它会拦截所有提供商（包括免费版），除非后面的语句 allow 某个集成。想保留旧含义，把它换成：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+  ],
+}</code></pre>
+<p>例外同样照此迁移：<code>integration.use</code> 的 <code>mcp:github</code> 变成 <code>mcp.use</code> 的 <code>github</code>；<code>skill:team:review</code> 变成 <code>skill.use</code> 的 <code>team:review</code>。</p>
+<p>低于 2.2.3 的客户端会忽略 <code>integration.connect</code>、<code>integration.use</code>（新含义）、<code>mcp.use</code>、<code>skill.use</code> 和 <code>plugin.use</code>，所以凡是依赖它们的场合，都要求 2.2.3 或更新版本。</p>
+
+<h2>网页搜索</h2>
+<p><code>websearch.use</code> 控制 <code>websearch</code> 工具可以使用哪些网页搜索提供商。资源是提供商 ID：Console 提供的 OpenCode Web Search 是 <code>opencode</code>，内置提供商如 <code>exa</code>、<code>firecrawl</code>、<code>parallel</code>、<code>tavily</code>、<code>tinyfish</code>，或插件添加的提供商 ID。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "websearch.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "opencode", "effect": "allow" },
+  ],
+}</code></pre>
+<p>被禁用的搜索提供商会移除，即使它们不需要 API key 也能工作（如 Exa 和 TinyFish）。当所有提供商都被禁用时，<code>websearch</code> 工具不再被提供。低于 2.2.6 的客户端会忽略 <code>websearch.use</code>。</p>
+
+<h2>优先级</h2>
+<p>普通设置让「离得最近的配置」胜出。策略正好相反：来自更宽范围配置的语句<strong>更晚求值</strong>，因此会覆盖更窄的。托管配置和已连接的 Console 永远压过用户和项目文件。</p>
+<table>
+<thead>
+<tr><th>权威级别</th><th>来源</th></tr>
+</thead>
+<tbody>
+<tr><td>1（最高）</td><td>macOS 托管偏好（<code>/Library/Managed Preferences/ai.opencode.managed.plist</code>）</td></tr>
+<tr><td>2</td><td>系统级 <code>opencode.json(c)</code>（<code>/Library/Application Support/opencode</code>、<code>/etc/opencode</code>、<code>%ProgramData%\opencode</code>）</td></tr>
+<tr><td>3</td><td>已连接的 OpenCode Console 工作区</td></tr>
+<tr><td>4</td><td>全局 <code>~/.config/opencode/opencode.json(c)</code></td></tr>
+<tr><td>5</td><td>直接的 <code>opencode.json(c)</code>；外层目录压过内层</td></tr>
+<tr><td>6（最低）</td><td><code>.opencode/opencode.json(c)</code>；外层目录压过内层</td></tr>
+</tbody>
+</table>
+<p>仓库无法重新启用你全局禁用的提供商：</p>
+<div class="term-head"><span>~/.config/opencode/opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}</code></pre>
+<div class="term-head"><span>project/opencode.jsonc</span><span>无效的尝试</span></div>
+<pre><code>{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}</code></pre>
+<p><code>openai</code> 仍然被禁。同一个文件里，语句保持书写顺序。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「宽的语句更晚求值、因此胜出」这个设计正反着用正好：日常规则写在项目文件里（窄），组织红线写进托管配置或 Console（宽）——红线永远压过项目里的「小聪明」。这也是为什么优先级表从「越机器托管」到「越靠近仓库」排列。</p>
+</aside>
+
+<h2>Console</h2>
+<p><a href="console.html">OpenCode Console</a> 上的工作区会把它的 Providers 和 Tools 策略编译成常规的 <code>policies</code> 语句放进工作区配置。OpenCode 合并这份配置时，把它当成一个排在托管偏好和系统文件之下、其余配置之上的配置文件：组织的 <code>deny</code> 无法被仓库或用户的 <code>allow</code> 解除；组织的 <code>allow</code> 则能解除更低权威的 <code>deny</code>。托管偏好和系统文件仍然压过工作区。</p>
+<p>这些语句产生的拒绝会点名工作区：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Blocked by Acme's policy</code></pre>
+<p>语句跟随已连接的账号：</p>
+<table>
+<thead>
+<tr><th>事件</th><th>结果</th></tr>
+</thead>
+<tbody>
+<tr><td>Console 策略变更</td><td>在下次拉取时生效，约每分钟一次</td></tr>
+<tr><td>切换到另一个工作区</td><td>语句替换为该工作区的语句</td></tr>
+<tr><td>断开连接</td><td>语句清空</td></tr>
+<tr><td>Console 不可达</td><td>该连接的最近语句继续生效</td></tr>
+</tbody>
+</table>
+<p>Console 插件和策略插件无法在 <code>plugins</code> 里禁用；见<a href="plugins.html">插件</a>的控制一节。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>策略不配置端点或凭证，也无法让一个本来就不可用的提供商变得可用。它也不给插件代码做沙箱隔离：被禁用的提供商是在正常的提供商与模型路径上被拦下来的。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

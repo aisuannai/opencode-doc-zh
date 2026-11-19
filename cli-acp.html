@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACP · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-acp" data-group="CLI" data-src="https://opencode.ai/docs/cli/acp/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>ACP</h1>
+<p class="lede"><code>opencode acp</code> 让 OpenCode 以 Agent Client Protocol（ACP）agent 的身份运行，从而可以从 Zed 等 ACP 客户端中使用它。本页前半是普通用户的使用指南，后半是面向 ACP 客户端作者的协议参考。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>ACP 可以类比成「编辑器和 AI 助手之间的通用插座」：过去每个编辑器要为每个 AI 工具单独做适配，像各家各异的插头；ACP 规定了统一的电压和插孔，任何客户端（Zed、未来更多编辑器）都能用同一种方式驱动任何 agent。OpenCode 插上这个插座，就能直接住进 Zed 的侧边栏里干活。</p>
+</aside>
+
+<h2>在客户端中接入</h2>
+<p>以 Zed 为例，把 OpenCode 加进它的 agent 服务器列表：</p>
+<div class="term-head"><span>~/.config/zed/settings.json</span><span></span></div>
+<pre><code>{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}</code></pre>
+<p>其它 ACP 客户端也使用同样的命令和 <code>acp</code> 参数，只是配置文件与字段名可能不同。如果图形客户端找不到 <code>opencode</code>，把 <code>command</code> 设为 <code>which opencode</code> 打印出的绝对路径。</p>
+
+<h2 id="authentication">鉴权</h2>
+<p>OpenCode 直接复用它已有的提供商凭据。启动 ACP 客户端之前，先在终端里登录：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode auth login</code></pre>
+<p>OpenCode 只提供一种认证方法 <code>opencode-login</code>。默认它是 agent auth 方法：<code>authenticate</code> 请求只接受这一方法，且不收集凭据。当某个 prompt 因为提供商需要登录而失败时，OpenCode 返回 ACP 的 <code>auth_required</code> 错误。</p>
+<p>如果客户端把 <code>clientCapabilities.auth.terminal</code> 设为 <code>true</code>，该认证方法就变成 terminal auth 方法：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}</code></pre>
+<p>此时客户端<strong>不得</strong>把该方法发给 <code>authenticate</code>，而应给启动 OpenCode 的命令加上 <code>--login</code>（例如 <code>opencode acp --login</code>）并在终端里运行。OpenCode 会执行 <code>opencode auth login</code> 流程然后退出；退出码 0 表示登录成功。客户端随后重连并再次发送 <code>initialize</code>。</p>
+<p>如果客户端把 <code>clientCapabilities._meta["terminal-auth"]</code> 设为 <code>true</code>，认证方法里会附带登录命令：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}</code></pre>
+
+<h2 id="troubleshooting">故障排查</h2>
+<p><code>opencode acp</code> 在 stdin 上等待 ACP 消息，所以直接在终端里运行它时看起来像卡住了——请改从 ACP 客户端启动它。</p>
+<p>如果客户端报告进程退出了、或输出了无效的协议数据，可以在客户端参数里把 <code>--print-logs</code> 加到 <code>acp</code> 之前。此后 OpenCode 会把 ACP 日志和私有服务器日志写到 stderr，而 stdout 只承载 ACP 消息：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode --print-logs acp</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>「直接运行 acp 看起来卡死」不是 bug：它就是在等管道里进消息。同理，<code>--print-logs</code> 必须放在 <code>acp</code> 子命令<strong>之前</strong>（<code>opencode --print-logs acp</code>），写错位置会被当成 acp 的未知参数。</p>
+</aside>
+
+<h2 id="protocol-reference">协议参考</h2>
+<p>本节面向 ACP 客户端作者，列出 OpenCode 支持的 ACP 部分以及 OpenCode 添加的 <code>_meta</code> 键。不认识这些键的客户端可以忽略它们。消息定义见 <a href="https://agentclientprotocol.com" target="_blank" rel="noopener">ACP 文档</a>。</p>
+
+<h3>传输层</h3>
+<p>客户端把 <code>opencode acp</code> 作为子进程启动，双方通过 stdin 和 stdout 交换按行分隔的 JSON-RPC 消息，使用 ACP 协议版本 1。</p>
+<p><code>opencode acp</code> 会为自用启动一个私有的 OpenCode 服务器；它不连接共享后台服务，也不为 ACP 打开网络端口。一个进程可以同时服务多个 ACP 会话。客户端关闭 stdin 时进程退出。</p>
+
+<h3>能力</h3>
+<p>OpenCode 的 <code>initialize</code> 响应包含以下 agent 能力：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}</code></pre>
+<p>OpenCode 会读取以下客户端能力：</p>
+<table>
+<thead><tr><th>能力</th><th>效果</th></tr></thead>
+<tbody>
+<tr><td><code>auth.terminal</code> 设为 <code>true</code></td><td>认证方法成为 <a href="#authentication">terminal auth 方法</a>。</td></tr>
+<tr><td><code>elicitation.form</code></td><td>OpenCode 以表单形式提问（见<a href="#questions">下文</a>）。</td></tr>
+<tr><td><code>session.compaction</code></td><td>OpenCode 通过 ACP 更新上报<a href="#compaction">压缩</a>进展。</td></tr>
+<tr><td><code>_meta["terminal-auth"]</code> 设为 <code>true</code></td><td>认证方法中附带<a href="#authentication">登录命令</a>。</td></tr>
+</tbody>
+</table>
+
+<h3>会话</h3>
+<p>客户端在创建会话时设定工作目录。OpenCode 使用该目录的配置，包括其中的模型、agent、命令、skills、instructions、插件和 MCP 服务器。</p>
+<ul>
+<li><code>cwd</code> 必须是绝对路径；传入相对路径会收到 invalid params 错误。</li>
+<li><code>session/load</code> 会重放已保存的消息；<code>session/resume</code> 和 <code>session/fork</code> 不重放。</li>
+<li>要 load、resume 或 fork 一个会话，客户端必须把该会话所在的目录作为 <code>cwd</code> 传入；传别的目录会收到 invalid params 错误。</li>
+<li><code>session/list</code> 每页最多返回 100 个会话，接受 <code>cwd</code> 过滤器和 <code>cursor</code>。</li>
+<li><code>session/close</code> 会中断正在执行的工作，并把会话从 ACP 进程分离。OpenCode 保留已保存的会话。</li>
+<li><code>session/delete</code> 先像 <code>session/cancel</code> 一样结束进行中的 prompt，然后移除会话。删除不存在的会话也会成功。</li>
+<li>一个会话同一时间只跑一个 prompt。第一个 prompt 还在进行时再发 <code>session/prompt</code>，OpenCode 会返回错误。</li>
+</ul>
+
+<h3>取消</h3>
+<p><code>session/cancel</code> 以 <code>stopReason: "cancelled"</code> 结束进行中的 prompt；对 prompt 请求发 <code>$/cancel_request</code> 效果相同。OpenCode 会拒绝仍在等待的权限请求，并把取消后未完成的工具调用报告为 <code>failed</code>。</p>
+
+<h3>附加目录</h3>
+<p>客户端可以在 <code>session/new</code>、<code>session/load</code>、<code>session/resume</code>、<code>session/fork</code> 上传 <code>additionalDirectories</code>：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }</code></pre>
+<ul>
+<li>每一项必须是绝对路径，且不含 <code>*</code> 或 <code>?</code>。</li>
+<li>OpenCode 允许在每个根之内访问外部目录；读取、编辑和 shell 的权限规则仍然生效。</li>
+<li>每次请求携带的列表会替换会话之前的列表，与 <a href="https://agentclientprotocol.com/rfds/additional-directories" target="_blank" rel="noopener">additional directories RFD</a> 的规定一致。</li>
+<li>OpenCode 把授权存储在会话上，因此其它 OpenCode 客户端使用该会话时同样生效；创建子会话时，授权会被复制进去。</li>
+</ul>
+<p><code>session/list</code> 会在 <code>additionalDirectories</code> 中返回每个会话已存储的列表。</p>
+
+<h3>配置选项</h3>
+<p>新会话使用所在目录的默认模型和主 agent。<code>session/new</code>、<code>session/load</code>、<code>session/resume</code>、<code>session/fork</code> 的响应包含这些配置选项：</p>
+<table>
+<thead><tr><th>ID</th><th>类别</th><th>可选值</th></tr></thead>
+<tbody>
+<tr><td><code>model</code></td><td><code>model</code></td><td>启用的模型，格式 <code>provider/model</code>。加 <code>/variant</code> 后缀还能同时设置 effort。</td></tr>
+<tr><td><code>effort</code></td><td><code>thought_level</code></td><td>该模型的各 variant 和 <code>default</code>。仅在有 variant 的模型上出现。</td></tr>
+<tr><td><code>mode</code></td><td><code>mode</code></td><td>可见的主 agent。</td></tr>
+</tbody>
+</table>
+<p><code>session/set_config_option</code> 接受字符串值：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }</code></pre>
+<p><code>session/set_mode</code> 同时设置 agent。当可用模型或 agent 变化时，OpenCode 会发送 <code>config_option_update</code>；其它客户端改变会话的模型或 agent 时也会发一次。</p>
+
+<h3>Prompt 内容</h3>
+<p>Prompt 可以包含文本、图片、嵌入式资源和资源链接。OpenCode 忽略音频块，其它块的处理方式如下：</p>
+<table>
+<thead><tr><th>块</th><th>OpenCode 的处理</th></tr></thead>
+<tbody>
+<tr><td><code>text</code></td><td>发给模型。</td></tr>
+<tr><td><code>text</code>（audience 仅为 <code>assistant</code>）</td><td>作为独立上下文发给模型，放在用户消息之外。</td></tr>
+<tr><td><code>text</code>（audience 仅为 <code>user</code>）</td><td>不进入模型输入。</td></tr>
+<tr><td>带 <code>data</code> 的 <code>image</code></td><td>附加到 prompt。</td></tr>
+<tr><td>仅有 <code>uri</code> 的 <code>image</code></td><td>按资源链接处理。</td></tr>
+<tr><td>带 <code>text</code> 的 <code>resource</code></td><td>把文本内联到资源的路径或 URI 之后。</td></tr>
+<tr><td>带 <code>blob</code> 的 <code>resource</code></td><td>有 <code>mimeType</code> 就附加，否则丢弃。</td></tr>
+<tr><td>指向 <code>file://</code> URI 的 <code>resource_link</code></td><td>附加该文件。文件缺失或不可读时改为发送 Markdown 链接。</td></tr>
+<tr><td>指向带 <code>path</code> 查询的 <code>zed://</code> URI 的 <code>resource_link</code></td><td>附加 <code>path</code> 处的文件。</td></tr>
+<tr><td>指向其它 URI 的 <code>resource_link</code></td><td>发送 Markdown 链接，例如 <code>[spec](https://example.com/spec.md)</code>。</td></tr>
+</tbody>
+</table>
+<p>audience 来自块的 <code>annotations</code>。既没有 <code>data</code> 也没有 <code>uri</code> 的 <code>image</code> 块会被拒绝。下面这个块只作为模型的上下文：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }</code></pre>
+
+<h3>命令</h3>
+<p>在 <code>session/new</code>、<code>session/load</code>、<code>session/resume</code> 或 <code>session/fork</code> 之后，OpenCode 发送 <code>available_commands_update</code>，包含该目录的命令和内置的 <code>compact</code> 命令。命令变化时会再次发送更新：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}</code></pre>
+<p>如果 prompt 以 <code>/</code> 加某个可用命令的名字开头，OpenCode 就执行该命令，其余文本作为参数。其它以 <code>/</code> 开头的文本按普通 prompt 发送。<code>/compact</code> 执行<a href="compaction.html">上下文压缩</a>。</p>
+
+<h3>MCP 服务器</h3>
+<p>客户端可以在 <code>session/new</code>、<code>session/load</code>、<code>session/resume</code>、<code>session/fork</code> 上传 stdio 和 HTTP MCP 服务器。OpenCode 会把它们加到会话目录上，有效期与 <code>opencode acp</code> 进程一致，因此该目录里的其它会话也能使用。OpenCode 会透传 HTTP 请求头，不对这些服务器使用 OAuth；不提供 SSE 方式的 MCP，也不支持 ACP 之上的 MCP。</p>
+<table>
+<thead><tr><th>情况</th><th>行为</th></tr></thead>
+<tbody>
+<tr><td>与已配置服务器同名</td><td>客户端的服务器在该目录中替换已配置的那个。</td></tr>
+<tr><td><a href="policies.html">策略</a></td><td><code>integration.use</code> 规则仍然生效。</td></tr>
+</tbody>
+</table>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }</code></pre>
+
+<h3>权限</h3>
+<p>权限请求提供三个选项：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]</code></pre>
+<p>当请求会修改文件时，如果 OpenCode 能构建改动的预览，就会附带 <code>diff</code> 内容。</p>
+
+<h3 id="questions">提问</h3>
+<p>如果客户端声明了 <code>elicitation.form</code>，OpenCode 会用 <code>elicitation/create</code> 以表单模式提问。当 OpenCode 曾把某个工具调用作为 <code>session/update</code> 发出时，请求会带上 <code>toolCallId</code>：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}</code></pre>
+<ul>
+<li>OpenCode 永远不会发送可能收集密钥的表单。</li>
+<li>如果某字段在选项之外还接受自由输入，schema 会加一个可选的 <code>&lt;key&gt;_custom</code> 字符串属性。单选题里，非空的自定义答案会替换已选选项；多选题里，自定义答案会追加到已选选项。</li>
+<li>用户拒绝或取消表单时，OpenCode 会取消这个问题。</li>
+</ul>
+<p>如果 OpenCode 无法展示问题，它会取消问题并让模型在没有答案的情况下继续。</p>
+
+<h3 id="compaction">压缩</h3>
+<p>如果客户端声明了 <code>session.compaction</code>，OpenCode 会用 ACP <a href="https://agentclientprotocol.com/rfds/session-compaction" target="_blank" rel="noopener">session compaction RFD</a>（处于 Preview 阶段）中的 <code>compaction_update</code> 和 <code>compaction_summary_chunk</code> 更新来上报压缩进展。客户端加载会话时，OpenCode 会把每一次已完成或失败的压缩各重放为一条更新：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}</code></pre>
+<p>其它客户端会收到<a href="#compaction-marker">压缩标记</a>；子会话的压缩也一样用标记。</p>
+
+<h3>用量</h3>
+<p>Prompt 响应包含 <a href="https://agentclientprotocol.com/rfds/end-turn-token-usage" target="_blank" rel="noopener">end-turn usage RFD</a>（草案）中的 <code>usage</code>。<code>usage</code> 汇总本会话中该 prompt 的所有模型调用，不含子会话：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }</code></pre>
+<p>响应之前，OpenCode 会发送 <a href="https://agentclientprotocol.com/rfds/session-usage" target="_blank" rel="noopener">session usage RFD</a> 中的 <code>usage_update</code>；仅当 prompt 消耗了 token 且 OpenCode 知道模型上下文大小时才发送。<code>cost</code> 是会话的累计费用（美元）：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }</code></pre>
+
+<h3>子会话</h3>
+<p>Prompt 运行期间，OpenCode 把子会话的更新作为 <code>session/update</code> 通知发到该 prompt 的会话上。每条更新携带 <code>_meta["opencode/child-session"]</code>。OpenCode 会给工具调用 ID 加上 <code>&lt;childSessionId&gt;:</code> 前缀；如果子会话有标题，工具调用标题也会加该标题前缀：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}</code></pre>
+<table>
+<thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td><code>string</code></td><td>子会话的 ID。</td></tr>
+<tr><td><code>parentID</code></td><td><code>string</code></td><td>子会话父会话的 ID。</td></tr>
+<tr><td><code>depth</code></td><td><code>number</code></td><td>prompt 会话的直接子会话为 1，孙会话为 2，依此类推。</td></tr>
+<tr><td><code>title</code></td><td><code>string</code></td><td>子会话的标题；子会话没有标题时省略。</td></tr>
+</tbody>
+</table>
+<p>来自子会话的权限请求会在 <code>toolCall._meta</code> 上带同样的键。Prompt 结束后，OpenCode 停止发送子会话更新；但子会话的权限请求和提问仍然会到达客户端。</p>
+
+<h3 id="retry-status">重试状态</h3>
+<p>当模型调用失败并安排重试时，OpenCode 发送带 <code>_meta["opencode/retry"]</code> 的 <code>session_info_update</code>。重试开始时发送 <code>"opencode/retry": null</code>。客户端应在收到 prompt 响应时清掉重试状态：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}</code></pre>
+<table>
+<thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>attempt</code></td><td><code>number</code></td><td>重试的序号。</td></tr>
+<tr><td><code>nextRetryAt</code></td><td><code>string</code></td><td>下次尝试的时间，ISO 8601 格式。</td></tr>
+<tr><td><code>error</code></td><td><code>object</code></td><td>含 <code>type</code> 和 <code>message</code>；提供商给出时还有 <code>status</code> 和 <code>response.body</code>。</td></tr>
+</tbody>
+</table>
+
+<h3 id="compaction-marker">压缩标记</h3>
+<p>如果客户端没有声明 <code>session.compaction</code>，OpenCode 用带 <code>_meta["opencode/compaction"]</code> 的 <code>session_info_update</code> 上报压缩进展。子会话的压缩则总是使用标记：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}</code></pre>
+<table>
+<thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>status</code></td><td><code>string</code></td><td><code>started</code>、<code>completed</code> 或 <code>failed</code>。被取消的压缩记为 <code>failed</code>。</td></tr>
+<tr><td><code>messageId</code></td><td><code>string</code></td><td>把一次压缩的开始和结束配对。请把它当作不透明的 key 处理。</td></tr>
+<tr><td><code>reason</code></td><td><code>string</code></td><td><code>auto</code> 或 <code>manual</code>。</td></tr>
+<tr><td><code>error</code></td><td><code>object</code></td><td><code>status</code> 为 <code>failed</code> 时出现，结构与<a href="#retry-status">重试</a>的 <code>error</code> 相同。</td></tr>
+</tbody>
+</table>
+<p>标记不含摘要。自动压缩可能在没有 <code>started</code> 标记的情况下直接失败。客户端加载会话时，OpenCode 把每一次已完成或失败的压缩各重放为一条标记。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「压缩更新 vs 压缩标记」的二选一设计值得留意：声明了 <code>session.compaction</code> 能力的客户端拿到带摘要内容的细粒度更新（可以做进度条和摘要预览）；没声明的只收到轻量的状态标记（适合只显示「正在压缩…」的客户端）。实现客户端时按自己界面的精细程度选择声明哪个能力即可。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

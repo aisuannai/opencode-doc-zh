@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>预算 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-budgets" data-group="Console" data-src="https://opencode.ai/docs/console/budgets/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>预算</h1>
+<p class="lede">预算（Budgets）通过策略（policies）为每月支出设置上限。所有者（Owner）和管理员（Admin）在 <strong>Controls</strong> 页管理它们。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>预算就像给整个团队、每个成员、每台自动化机器人各办一张「月度消费卡」：卡里预存了本月的额度上限，刷爆了就统统拒付（HTTP 429），等下月 1 号自动「充值」。它防的是两件事——某个同事半夜让模型疯狂跑长任务把公司账单刷爆，以及自动化脚本失控烧钱。额度可粗（整个工作区一张卡）可细（按标签、按具体成员、按服务账号发卡）。</p>
+</aside>
+
+<h2>预算层级</h2>
+<table>
+<thead><tr><th>策略受众</th><th>适用于</th></tr></thead>
+<tbody>
+<tr><td>整个工作区（Entire workspace）</td><td>所有成员和服务账号的总支出</td></tr>
+<tr><td>所有成员（All members）</td><td>每位成员各一份，或全组共享一份</td></tr>
+<tr><td>带某标签的成员（Members tagged with）</td><td>拥有所选标签的成员</td></tr>
+<tr><td>这些成员（These members）</td><td>指定的具体成员</td></tr>
+<tr><td>所有服务账号（All service accounts）</td><td>每个服务账号各一份，或共享一份</td></tr>
+<tr><td>这些服务账号（These service accounts）</td><td>指定的具体服务账号</td></tr>
+</tbody>
+</table>
+<p>一个请求必须落在<strong>每一层</strong>适用的预算之内。更大的额度永远不会覆盖更小的那个。如果完全没有预算，支出是不设上限的。</p>
+
+<h2>工作区预算</h2>
+<p>工作区预算一旦触顶，会对所有人阻断请求。</p>
+<ol>
+<li>打开 <strong>Controls</strong>，点击 <strong>Add policy</strong>。</li>
+<li>选择 <strong>Entire workspace</strong>，添加一条 <strong>Budget</strong> 规则。</li>
+<li>输入以美元计的月度上限，点击 <strong>Save</strong>。</li>
+</ol>
+
+<h2>成员预算</h2>
+<p>在策略中选择 <strong>All members</strong>，可以给每位成员各发一份月度额度，或让全组共享一份。选择具体成员或标签，可以只覆盖一个小群体。</p>
+<p>给某个人单独设预算：</p>
+<ol>
+<li>在 <strong>Settings › Members</strong> 中打开该成员。</li>
+<li>点击 <strong>Create budget policy</strong>，构建器会带着这个人打开。</li>
+<li>输入金额，点击 <strong>Save</strong>。</li>
+</ol>
+<p>他的成员页面会列出适用的策略。如果同时还有一条全员预算也覆盖到他，两道上限同时生效。</p>
+
+<h2>服务账号预算</h2>
+<p>在 <strong>Controls</strong> 中选择 <strong>All service accounts</strong> 或 <strong>These service accounts</strong>，添加一条 <strong>Budget</strong> 规则，并设置单人额度或共享的月度额度。该策略覆盖这些账号名下的每一个 key。</p>
+
+<h2>金额与重置</h2>
+<ul>
+<li>金额以美元计，最多两位小数。</li>
+<li>预算在每月 1 日 00:00 UTC 重置。</li>
+<li><code>$0</code> 预算会阻断所有计入预算的支出。</li>
+<li>新增或修改预算时，当月已记录的支出会被计入——额度不会因此清零重来。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>「月中加预算不清零」这一点很容易误解：假如 15 号才建了一条 $50 的全员预算，而团队这半个月已经花了 $60，那这条预算立刻就把所有人拦住了，不是「从今天起再给 $50」。给存量团队上预算前，先去 <strong>Activity › Usage</strong> 看看本月已经花了多少。</p>
+</aside>
+
+<h2>什么会计入预算</h2>
+<p>默认情况下，预算覆盖<strong>全部支出（All spend）</strong>。你也可以把范围缩小到所选模型；此时只有这些模型计入，且可以选择整组共享一份额度，或每个模型单独一份。</p>
+<table>
+<thead><tr><th>支出</th><th>是否计入预算</th></tr></thead>
+<tbody>
+<tr><td>Console 付费模型</td><td>计入</td></tr>
+<tr><td><a href="console-providers.html">自有提供商</a>上设置了价格的模型</td><td>计入，按配置的价格</td></tr>
+<tr><td><a href="console-websearch.html">网页搜索</a></td><td>计入，仅限全支出（all-spend）预算</td></tr>
+<tr><td>免费模型</td><td>不计入</td></tr>
+<tr><td><a href="console-go.html">Go</a> 计划内的用量</td><td>不计入</td></tr>
+<tr><td>用额度支付的 Go 超额用量</td><td>计入</td></tr>
+</tbody>
+</table>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>注意「计划内 Go 用量不计入」和「Go 超额用量计入」的分界：Go 订阅相当于「先包月、后计费」，包月部分花了多少都不吃预算；但一旦开了 Extra Usage 走按量扣款，这部分又回到预算管控之内。想在预算上完全精确控成本，就把 Go 超额功能关掉。</p>
+</aside>
+
+<h2>触达预算之后</h2>
+<p>新请求会以 HTTP <code>429</code> 失败，直到预算重置，或有所有者/管理员调高上限。响应会表明这是一次策略预算失败，但不会点名是哪个预算。在 <strong>Activity › Logs</strong> 中打开该请求，即可看到拦截它的策略。</p>
+<div class="term-head"><span>text</span><span>错误信息</span></div>
+<pre><code>Upstream request failed: Policy budget exceeded</code></pre>
+<p>预算在请求开始时检查。已经开始的请求会跑完，所以最终支出可能略微超出上限。</p>
+
+<h2>追踪支出</h2>
+<p>每位成员都能在 <strong>Activity</strong> 页看到自己的支出和上限。打开 <strong>My usage</strong> 进入 <strong>Activity › Overview</strong>，其中包括预算详情和重置日期。</p>
+<p>所有者和管理员可以从支出图表打开 <strong>Activity › Usage</strong>。它按天、按模型、按人细分成本，<strong>Export usage</strong> 按钮可以下载最近 7、30 或 90 天的每日汇总 CSV。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

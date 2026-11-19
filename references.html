@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>References · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="references" data-group="配置" data-src="https://opencode.ai/docs/references/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>References</h1>
+<p class="lede">Reference（引用）让 OpenCode 能以具名方式访问当前项目之外的目录。在 <code>opencode.json</code> / <code>opencode.jsonc</code> 里定义一个引用，需要时在客户端里附加它的别名（alias）即可。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>OpenCode 默认只在「当前项目」里干活，但你的资料往往散落在别处——另一个仓库的文档、隔壁的设计系统、公司内网 GitLab 上的 SDK 源码。Reference 就是给这些外部目录起个「花名」并登记在册：先在配置里声明 <code>docs → ../product-docs</code>，之后只要跟 AI 说「看看 docs」，它就知道去哪找。相当于给智能体发了一张「跨项目通行证」。</p>
+</aside>
+
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}</code></pre>
+<p>附加 <code>docs</code> 之后，让智能体去查看相关路径即可：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Read the attached docs reference and summarize api/authentication.md.</code></pre>
+<p>适合用 Reference 的场景：文档、共享库、示例代码，或来自另一个仓库的源码。</p>
+
+<h2>本地目录</h2>
+<p>本地目录用 <code>path</code> 字段：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}</code></pre>
+<p>路径的解析规则：</p>
+<ul>
+<li>相对路径从<strong>配置文件所在目录</strong>开始解析。</li>
+<li>支持绝对路径。</li>
+<li>支持家目录相对路径，如 <code>~/docs</code>。</li>
+</ul>
+<p>如果不需要其它字段，可以直接用字符串简写：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>字符串简写只有在<strong>以 <code>.</code>、<code>/</code> 或 <code>~</code> 开头时才被视为本地路径</strong>。要写 <code>./docs</code> 而不是 <code>docs</code>——裸写的 <code>docs</code> 会被当成一个 Git 仓库（GitHub 上的 <code>owner/repo</code> 简写），结果完全不 同。</p>
+</aside>
+
+<h2>Git 仓库</h2>
+<p>远程 Git 仓库用 <code>repository</code> 字段：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}</code></pre>
+<p>支持以下远程形式：</p>
+<ul>
+<li>GitHub 的 <code>owner/repo</code> 简写</li>
+<li>Git URL</li>
+<li>host/path 形式</li>
+<li>SCP 风格的 remote 写法</li>
+</ul>
+<p>不支持本地的 <code>file:</code> 仓库。</p>
+<p>用字符串简写时，会跟踪远程仓库的默认分支：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}</code></pre>
+<p>不写 <code>branch</code> 时，OpenCode 会检出并刷新远程的默认分支。分支名可以包含字母、数字、<code>/</code>、<code>_</code>、<code>.</code>、<code>-</code>，但不能以 <code>-</code> 开头，也不能包含 <code>..</code>。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}</code></pre>
+
+<h2>存储位置</h2>
+<p>OpenCode 会把每个远程地址规范化，并按「一个远程 + 一个分支 = 一份检出」存放在全局数据目录下。不指定分支时，路径结构是：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>opencode/repos/&lt;host&gt;/&lt;repository-path&gt;</code></pre>
+<p>在典型的 Linux 环境里，<code>Effect-TS/effect</code> 存放在：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.local/share/opencode/repos/github.com/Effect-TS/effect</code></pre>
+<p>如果指定了分支，路径会追加一个编码后的 <code>@&lt;branch&gt;</code> 后缀：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.local/share/opencode/repos/github.com/Effect-TS/effect@main</code></pre>
+
+<h2>刷新机制</h2>
+<p>缺失的仓库会被异步克隆。已存在的检出则会在后台检查：引用加载或重载时、以及新用户提示被允许进入其 Location 之后。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Prompt admitted → refresh check starts in background → agent continues</code></pre>
+<p>一份检出在满足以下条件时才需要刷新：上次刷新尝试距今至少 24 小时，或者从未尝试过。刷新会拉取远端并重置到配置的分支（或远程默认分支）。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped</code></pre>
+<p>刷新遵循这些规则：</p>
+<ul>
+<li>时间戳跨服务重启持久保存。</li>
+<li>使用同一份检出的 Location 共享同一个时间戳。</li>
+<li>失败的尝试会被记录，同样受 24 小时限流约束。</li>
+<li>Location 未使用时，不会有周期性轮询。</li>
+<li>某个引用克隆或刷新失败，不影响其它引用加载。</li>
+</ul>
+<p>提示词不会等待克隆或刷新完成。附件里可能是旧内容，即使之后工具读文件时已经看到了更新后的检出；新引用也可能在它的检出就绪之前就已出现。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Attachment created → cached content
+Background refresh completes → later tool read sees newer content</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>缓存的检出是<strong>共享的</strong>，智能体正在使用时也可能被后台刷新。不要直接去编辑缓存目录里的文件——刷新会把它们重置掉，你的改动会丢。</p>
+</aside>
+
+<h2>使用引导</h2>
+<p><code>description</code> 字段告诉智能体这个引用什么时候相关。带 description 的引用会连同别名和解析出的路径一起出现在智能体的指令（instructions）里。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}</code></pre>
+<p>没写 description 的引用对客户端仍然可用，但不会被自动推荐：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}</code></pre>
+
+<h2>可见性</h2>
+<p>把 <code>hidden</code> 设为 <code>true</code>，可以把某个引用从交互式客户端的选择器里隐藏：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}</code></pre>
+<p><code>hidden</code> 只影响交互界面的可见性。该引用仍然会出现在 Reference API 中，并且如果它有 description，也仍会出现在智能体指令里。</p>
+
+<h2>使用方式</h2>
+<p>客户端通过根别名（root alias）附加一个引用。附件里包含该根目录<strong>直接子级</strong>文件和目录的非递归列表。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.</code></pre>
+<p>需要根目录之下的具体内容时，直接让智能体查看具体路径即可。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「附加引用」给出的只是<strong>一层目录清单</strong>，不是整个目录的内容快照——这是为了控制上下文占用。把它当作一张「地图」：AI 看到顶层结构后，再用读文件工具钻进感兴趣的文件。所以提示词里最好直接点名，比如「看看 docs/guides/deployment.md」，比含糊地说「了解 docs」效率高得多。</p>
+</aside>
+
+<h2>权限</h2>
+<p>Reference 不会授予额外的工具权限。访问当前 Location 之外的路径仍然遵守正常的工具规则和 <code>external_directory</code> 权限；要编辑还需要相应的编辑权限。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Read ../product-docs/api.md</code></pre>
+<p>只有当当前权限允许这次外部读取时，这个请求才会成功。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>Reference 是「登记处」，不是「通行证」：登记一个外部目录只是让 AI 知道它在哪、叫什么，真要读它时仍然要走权限门卫（<code>external_directory</code>）那一关。想放开读取范围，去 <a href="permissions.html">权限</a>一章配置。</p>
+</aside>
+
+<h2>字段一览</h2>
+<table>
+<thead>
+<tr><th>字段</th><th>本地</th><th>Git</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td><code>path</code></td><td>必填</td><td>否</td><td>本地目录路径</td></tr>
+<tr><td><code>repository</code></td><td>否</td><td>必填</td><td>远程 Git 仓库</td></tr>
+<tr><td><code>branch</code></td><td>否</td><td>可选</td><td>要拉取并检出的分支</td></tr>
+<tr><td><code>description</code></td><td>可选</td><td>可选</td><td>说明智能体何时应使用它</td></tr>
+<tr><td><code>hidden</code></td><td>可选</td><td>可选</td><td>从交互式客户端选择器中隐藏</td></tr>
+</tbody>
+</table>
+<p>一个完整的 Git 条目可以用上所有与 Git 兼容的字段：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}</code></pre>
+
+<h2>别名规则</h2>
+<p>别名不能为空，也不能包含 <code>/</code>、<code>\</code>、空白字符、反引号或逗号。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Valid:   docs
+Invalid: product docs
+Invalid: docs/api</code></pre>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

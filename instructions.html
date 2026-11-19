@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>指令文件 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="instructions" data-group="配置" data-src="https://opencode.ai/docs/instructions/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>指令文件</h1>
+<p class="lede">加一个 <code>AGENTS.md</code>，就能给 OpenCode 持久的项目指引：构建命令、架构要点、代码规范、验收要求，都写在这里，每次会话自动生效。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>给新同事的入职手册怎么写？「改完 TS 要跑 <code>bun typecheck</code>」「数据库查询都放 <code>src/database</code>」「别手改生成文件」。AGENTS.md 就是写给 AI 同事的这份手册——它是 Markdown 纯文本，跟着仓库走，提交进版本库后团队每个人（包括 AI）看到的项目规则都一致。你不用每次在聊天里重复交代规矩。</p>
+</aside>
+
+<div class="term-head"><span>AGENTS.md</span><span></span></div>
+<pre><code># Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.</code></pre>
+<p>把项目指令文件提交进版本库，让每个在仓库里工作的人都得到同样的指引。</p>
+
+<h2>作用范围</h2>
+<p>把 <code>AGENTS.md</code> 放在希望它生效的目录里。OpenCode 先加载全局文件，然后从当前工作区目录一路向家目录方向加载每一层 <code>AGENTS.md</code>；工作区在家目录之外时，会在项目根目录停下。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace</code></pre>
+<p>这个例子里四个文件都会加载，合并顺序如下：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md</code></pre>
+<p>适用于一切场景的指引放全局文件；仓库级指引放项目根目录；越靠近代码的文件放越具体的指引。OpenCode 只做合并，<strong>不解决文件之间的冲突</strong>。</p>
+<p>工作区在项目根之外时，只加载全局文件。设置 <code>OPENCODE_DISABLE_PROJECT_CONFIG=1</code> 可以跳过项目 <code>AGENTS.md</code> 的发现，但不影响全局文件。</p>
+
+<h3>CLAUDE.md 回退</h3>
+<p>在没有 <code>AGENTS.md</code> 的目录里，OpenCode 会改读 <code>CLAUDE.md</code>。没有全局 <code>~/.config/opencode/AGENTS.md</code> 时，它会读 <code>~/.claude/CLAUDE.md</code>。同一目录里 <code>AGENTS.md</code> 永远优先于 <code>CLAUDE.md</code>，所以两个文件之间的符号链接也只会加载一次。</p>
+<p>设 <code>OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1</code> 可跳过所有 <code>CLAUDE.md</code>；设 <code>OPENCODE_DISABLE_CLAUDE_CODE=1</code> 会连 <code>.claude</code> 技能一起跳过。服务器在启动时读取这两个变量。对后台服务，用 <code>opencode service set env</code> 持久化它们，然后 <code>opencode service restart</code>。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><code>AGENTS.md</code> 正在成为多家工具共同遵循的开放约定，而 <code>CLAUDE.md</code> 是 Claude Code 的惯例文件名。OpenCode 的回退机制意味着：一个从 Claude Code 迁移过来的仓库不用改任何文件就能直接用；反过来你也可以用符号链接让两个文件永远同步，维护一份就够。</p>
+</aside>
+
+<h2>发现机制</h2>
+<p>工作区之下的指令文件，会随着智能体探索项目而被发现。读一个文件或列一个目录时，会加载该目标与工作区之间的所有 <code>AGENTS.md</code>：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target</code></pre>
+<p>嵌套文件按「最近优先」加载，并在其指令条目还留在模型可见历史里时去重。重复读同一区域通常不会再次注入。如果压缩（compaction）或回退把那条目移掉了，之后的读取可以再次加载该文件。</p>
+<p>嵌套文件加载之后，对它的编辑不会自动被检测。需要更新的文本立刻生效时，请开一个新会话。</p>
+
+<h2>指令顺序</h2>
+<p>选定的智能体或提供商系统提示词最先发送。OpenCode 然后按这个顺序组装初始指令：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API</code></pre>
+<p>这些来源是<strong>叠加</strong>关系，不是互相覆盖。后来发现的嵌套 <code>AGENTS.md</code> 按发现顺序追加进会话历史。</p>
+
+<h2>热更新</h2>
+<p>会话运行中，编辑全局或向上发现的 <code>AGENTS.md</code> 就能更新指引：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ printf '\n- Run the integration suite before committing.\n' &gt;&gt; AGENTS.md</code></pre>
+<p>在下一次模型请求之前，OpenCode 会检测到变化，并在交付待处理输入前插入一条指令更新：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>AGENTS.md changes
+→ instruction update
+→ next prompt</code></pre>
+<ul>
+<li>删除所有环境内的 <code>AGENTS.md</code> 会告诉会话：之前的环境内指令不再适用。</li>
+<li>临时读取失败会保留最后一次已知的指令，而不是当作已删除。</li>
+<li>移动会话会保留其指令状态，目的地处的指引会以「更新」的形式引入。</li>
+<li>提交会话回退（revert）会清空指令状态，并在下一次提示词之前重新加载指令。</li>
+</ul>
+<p>指令内容保持<strong>特权</strong>：客户端能看到哪些来源变了，但看不到内容本身。</p>
+
+<h2>配置扩展</h2>
+<p>用 <code>instructions</code> 数组，可以在自动发现的 <code>AGENTS.md</code> 之外添加文件、glob 模式或 HTTP(S) URL：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}</code></pre>
+<p>配置的指令在 <code>AGENTS.md</code> 之后按列出顺序加载。来自每个配置文档的条目都会合并。</p>
+<table>
+<thead>
+<tr><th>条目形式</th><th>解析方式</th></tr>
+</thead>
+<tbody>
+<tr><td>相对路径或 glob</td><td>从工作区到项目根的每一层目录里搜索</td></tr>
+<tr><td><code>~/</code> 路径</td><td>从家目录解析</td></tr>
+<tr><td>绝对路径</td><td>按原样使用；文件名可以是 glob</td></tr>
+<tr><td><code>http://</code> 或 <code>https://</code></td><td>配置加载时抓取，超时 5 秒</td></tr>
+</tbody>
+</table>
+<ul>
+<li>本地文件变化时的更新方式与 <code>AGENTS.md</code> 相同。匹配 glob 的新文件在下一次配置变化时加载。</li>
+<li>缺失的文件被跳过。抓不到的 URL 会被跳过，或保留最后一次抓到的内容。</li>
+<li>设置 <code>OPENCODE_DISABLE_PROJECT_CONFIG=1</code>，或工作区在项目之外时，相对条目从全局配置目录解析。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>指令文件是「建议」不是「法律」：模型通常遵守，但不保证 100% 执行——强约束（比如禁止碰某些文件）要配 <a href="permissions.html">权限</a>或 <a href="policies.html">策略</a>来兜底，双保险才是正解。另外，指令内容会占用上下文，写精华条目而不是把整个编码规范全文塞进去。</p>
+</aside>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>已连接的 <a href="console.html">OpenCode Console</a> 工作区也可以共享指令。配置的位置与优先级见 <a href="config.html">配置</a>一章。想给单个智能体定制行为，还可以结合 <a href="agents.html">Agents</a> 使用。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>构建总览 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-intro" data-group="构建与集成" data-src="https://opencode.ai/docs/build/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>构建总览</h1>
+<p class="lede">每天有数百万人使用 OpenCode。在它之上构建你自己的应用、集成和智能体体验，不必从零开始。</p>
+
+<p>这一页是「构建与集成」章节的总览：OpenCode 提供三条扩展路径，覆盖从「稍微加点功能」到「整个产品嵌入它」的全部需求。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把 OpenCode 想象成一栋带水电煤的毛坯房：<strong>插件（Plugin）</strong>是不动承重墙的装修——加工具、加命令、改行为，但主体还是 OpenCode；<strong>服务器模式（Server）</strong>是只租这栋房子——通过客户端连上 OpenCode 服务端，TUI 和桌面应用用的就是同一个客户端，你可以围着它盖任何界面；<strong>嵌入（SDK）</strong>是把整栋房子买下来放进你的地皮——把 OpenCode 直接嵌进你的应用里，做一个完全自定义的智能体产品。</p>
+</aside>
+
+<h2>三条路径</h2>
+<ul>
+<li><strong><a href="build-plugins.html">扩展 OpenCode</a></strong>——编写插件，添加工具、集成、命令、agents 和自定义行为，同时保持 OpenCode 其余部分原封不动。</li>
+<li><strong><a href="build-client.html">把它跑成服务器</a></strong>——用与 TUI 和桌面应用完全相同的客户端连接 OpenCode，然后在它之上构建任何界面、工作流或智能体体验。</li>
+<li><strong><a href="build-sdk.html">把它嵌入应用</a></strong>——将 OpenCode 直接嵌入你的应用程序，围绕它构建一个完全自定义的智能体、界面或开发者产品。</li>
+</ul>
+
+<h2>Effect API</h2>
+<p>除了标准 JavaScript/TypeScript API 之外，OpenCode 还为三块内容提供了 <a href="https://effect.website" target="_blank" rel="noopener">Effect</a> 风格的 API，适合已经采用 Effect 生态的团队：</p>
+<ul>
+<li><a href="build-plugins-effect.html">Effect 插件</a>——用 Effect 编写服务器插件；</li>
+<li><a href="build-client-effect.html">Effect 客户端</a>——用 Effect 连接 OpenCode 服务器；</li>
+<li><a href="build-sdk-effect.html">Effect SDK</a>——用 Effect 嵌入 OpenCode。</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>Effect 是一个 TypeScript 的函数式运行时框架，特点是强类型错误处理和结构化并发。如果你没接触过 Effect，完全不用慌——本站每一对页面（如<a href="build-client.html">客户端</a>与 <a href="build-client-effect.html">Effect 客户端</a>）讲的都是同一个功能，Effect 版只是 API 风格不同，先读非 Effect 版就够了。</p>
+</aside>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>按目的选入口：只想「让 OpenCode 多会点本事」→ 从<a href="build-plugins.html">插件总览</a>读起；想做「围绕 OpenCode 会话的前端/自动化」→ 从<a href="build-client.html">客户端 (JS)</a> 读起，能直接对接 <a href="api.html">HTTP API</a>；想把「智能体能力做成产品卖点」→ 从 <a href="build-sdk.html">SDK</a> 读起，Cloudflare 部署见 <a href="build-sdk-cloudflare.html">Cloudflare SDK</a>。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

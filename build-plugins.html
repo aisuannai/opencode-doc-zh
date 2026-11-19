@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件总览 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-plugins" data-group="构建与集成" data-src="https://opencode.ai/docs/build/plugins/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>插件总览</h1>
+<p class="lede">插件（plugin）可以修改 OpenCode 的行为、添加新功能。一个插件就是一个 npm 包，里面可以包含服务器（server）部分、TUI 部分、GUI 部分，或它们的任意组合。</p>
+
+<div class="term-head"><span>.opencode/plugins/example/index.ts</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>已经在用 OpenCode 1 的老插件？本站插件 API 是 2.x 版本的新体系，请先按 <a href="build-plugins-migrate-v1.html">插件迁移（V1 → V2）指南</a>迁移，再按本页结构组织代码。</p>
+</aside>
+
+<h2>包的组成部分（Parts）</h2>
+<p>每个部分（part）都是包的一个导出（export）。所有部分的 SDK 都来自同一个依赖 <code>@opencode/plugin</code>。</p>
+
+<div class="term-head"><span>package.json</span><span>JSON</span></div>
+<pre><code>{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}</code></pre>
+
+<p>四种部分的分工：</p>
+<table>
+<thead>
+<tr><th>部分</th><th>导出路径</th><th>运行位置 / 依赖子路径</th><th>能力</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>服务器（Server）</strong></td><td><code>.</code> 或 <code>./server</code></td><td>OpenCode 服务器内，<code>@opencode/plugin</code></td><td>添加工具、钩子（hook）、集成、命令和 agents。见<a href="build-plugins-server.html">服务器插件</a>；Effect API 见 <a href="build-plugins-effect.html">Effect 插件</a>。</td></tr>
+<tr><td><strong>TUI</strong></td><td><code>./tui</code></td><td>终端界面内，<code>@opencode/plugin/tui</code></td><td>见 <a href="build-plugins-cli.html">TUI 插件</a>。</td></tr>
+<tr><td><strong>GUI</strong></td><td><code>./gui-experimental</code></td><td>OpenCode Desktop，<code>@opencode/plugin/gui</code></td><td>它的 <code>setup</code> 在每个桌面窗口里运行，<code>main</code> 在桌面应用的主进程里运行。见 <a href="build-plugins-gui.html">GUI 插件</a>。</td></tr>
+<tr><td><strong>RPC</strong></td><td><code>./rpc</code></td><td>类型化契约</td><td>由服务器部分实现，其它部分和客户端调用。见 <a href="build-plugins-rpc.html">RPC</a>。</td></tr>
+</tbody>
+</table>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把插件包想象成一家公司：服务器部分是「总部」，负责所有核心业务（工具、钩子、命令）；TUI 和 GUI 部分是两家「门店」，各自只关心自己界面上呈现什么；RPC 是公司内部的「对讲机协议」——总部定义并实现接口，门店和外部客户按同一份契约呼叫总部。所有门店共享一个依赖（<code>@opencode/plugin</code>），不需要各装一套。</p>
+</aside>
+
+<p>几个关于 <code>id</code> 的规则：插件的 <code>id</code> 来自其服务器部分 <code>Plugin.define</code> 里的声明。如果包只有 GUI 部分而没有服务器部分，则取包名（本地目录则取目录名）作为 <code>id</code>。TUI 部分要自己声明 <code>id</code>；GUI 部分不声明，直接沿用插件的 <code>id</code>。</p>
+
+<h2>加载（Load）</h2>
+<p>放在 <code>.opencode/plugins/</code> 目录下的插件会自动加载，就像上面那个本地示例一样。要加载已发布的 npm 包、或位于其它位置的插件目录，把它们加进 <code>opencode.json(c)</code> 的 <code>plugins</code> 字段：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}</code></pre>
+
+<ul>
+<li><strong>一个条目加载全部部分。</strong>服务器加载插件的全部部分；TUI 会加载其服务器所加载插件的 TUI 部分；OpenCode Desktop 会加载你全局 <code>opencode.json(c)</code> 中插件的 GUI 部分。</li>
+<li>只有 TUI 部分的包，要放进 <a href="cli-plugins.html"><code>cli.json</code></a> 而不是 <code>opencode.json(c)</code>。</li>
+<li>本地插件目录如果带有 <code>package.json</code> 的 <code>name</code> 和 <code>exports</code> 字段，就按它们加载各部分，行为和已发布包一样。没有这两个字段时，则按根目录下的文件名加载：<code>server</code>（缺省回退到 <code>index</code>）、<code>tui</code>、<code>rpc</code>，扩展名可以是 <code>.ts</code>、<code>.tsx</code> 或 <code>.js</code>；GUI 部分则是 <code>gui-experimental.cjs</code>（或 <code>.js</code>）。</li>
+<li>更多加载与配置选项见<a href="plugins.html">配置插件</a>一章。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>「只有 TUI 部分的插件放 <code>cli.json</code>」这条容易搞反：<code>opencode.json(c)</code> 是项目/全局级配置，管的是有服务器部分的完整插件；而 <code>cli.json</code> 只管 TUI 界面层的扩展。如果你的插件带服务器部分（哪怕只是想让 RPC 生效），就应该放 <code>opencode.json(c)</code>。</p>
+</aside>
+
+<h2>发布（Publish）</h2>
+<p>已发布的插件就是一个带有上面那种 <code>package.json</code> 的 npm 包。它的各部分与本地插件使用相同的默认导出（default export）。</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>npm publish</code></pre>
+
+<ul>
+<li>当其它插件和客户端需要在不加载你实现的情况下导入你的 <a href="build-plugins-rpc.html">RPC 契约</a>时，要单独导出 <code>./rpc</code>。</li>
+<li>发布前要先构建 GUI bundle，并通过 <code>files</code> 字段把它包含进包里。见 <a href="build-plugins-gui.html">GUI 插件 · 构建 bundle</a>。</li>
+<li>使用的版本要与你目标支持的 OpenCode 版本兼容；安装后要用<strong>真正安装的包</strong>来测试，而不能只测工作区里软链（workspace-linked）的副本。当你采用更新的 API 契约时，要发布一个兼容的插件更新。</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>最后一条是 npm 插件开发者的经典翻车点：开发时用 <code>npm link</code> 或 monorepo workspace 引用，一切正常；一发布，用户环境里解析依赖的方式不同就炸了。发布前用 <code>npm pack</code> + 在干净项目里 <code>npm install ./xxx.tgz</code> 做一轮「安装态测试」，能省掉大量售后问题。</p>
+</aside>
+
+<h2>延伸阅读</h2>
+<ul>
+<li><a href="build-plugins-server.html">服务器插件</a>——在 OpenCode 服务器中添加工具、钩子、集成、命令和 agents。</li>
+<li><a href="build-plugins-cli.html">TUI 插件</a>——给终端界面添加命令、路由、插槽和 Markdown 渲染器。</li>
+<li><a href="build-plugins-gui.html">GUI 插件</a>——给 OpenCode Desktop 添加面板、命令、设置页和原生集成。</li>
+<li><a href="build-plugins-rpc.html">RPC</a>——把服务器部分的类型化方法和事件暴露给其它部分和客户端。</li>
+</ul>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

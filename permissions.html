@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>权限 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="permissions" data-group="配置" data-src="https://opencode.ai/docs/permissions/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>权限</h1>
+<p class="lede">权限（Permissions）控制智能体能否对某个资源执行某个动作。核心是一条条「动作 + 资源 + 效果」的规则，按顺序匹配、最后一条匹配的规则胜出。</p>
+
+<h2>配置（Configure）</h2>
+<p>一个常见的配置是：运行 shell 命令前先询问，放行常规的 Git 只读检查，永远禁止推送。把下面这组有序规则加进 <code>opencode.jsonc</code>：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}</code></pre>
+
+<p><strong>最后一条匹配的规则胜出</strong>，所以具体的例外要放在宽泛规则的后面。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>V1 使用不同的字段名和动作名。V2 请用 <code>permissions</code>、<code>shell</code>、<code>subagent</code>，而不是 V1 的 <code>permission</code>、<code>bash</code>、<code>task</code>。</p>
+</aside>
+
+<h2>规则（Rules）</h2>
+<p>每条规则需要三个字符串字段：</p>
+
+<table>
+<thead>
+<tr><th>字段</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td><code>action</code></td><td>工具权限动作</td></tr>
+<tr><td><code>resource</code></td><td>被使用的值，如路径、命令、URL、查询词、skill ID 或智能体 ID</td></tr>
+<tr><td><code>effect</code></td><td><code>allow</code>、<code>deny</code> 或 <code>ask</code></td></tr>
+</tbody>
+</table>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>效果</th><th>结果</th></tr>
+</thead>
+<tbody>
+<tr><td><code>allow</code></td><td>直接放行，不提示</td></tr>
+<tr><td><code>deny</code></td><td>阻止该操作</td></tr>
+<tr><td><code>ask</code></td><td>等待客户端做出决定</td></tr>
+</tbody>
+</table>
+
+<p>没有任何规则匹配时，OpenCode 使用 <code>ask</code>。</p>
+
+<h2>匹配规则（Matching）</h2>
+<p>动作和资源使用简单的整值通配符：</p>
+
+<table>
+<thead>
+<tr><th>模式</th><th>匹配</th></tr>
+</thead>
+<tbody>
+<tr><td><code>*</code></td><td>零个或多个字符，包括 <code>/</code></td></tr>
+<tr><td><code>?</code></td><td>恰好一个字符</td></tr>
+<tr><td>其它</td><td>字面字符</td></tr>
+</tbody>
+</table>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}</code></pre>
+
+<p>这个模式匹配整条规范化（normalized）后的路径。反斜杠会被规范化为正斜杠，Windows 上匹配不区分大小写。</p>
+
+<p>以 <code> *</code> 结尾的 shell 模式还匹配不带参数的命令：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{ "action": "shell", "resource": "git status *", "effect": "allow" }</code></pre>
+
+<p>它同时匹配 <code>git status</code> 和 <code>git status --short</code>。</p>
+
+<p>OpenCode 按顺序组合规则并采用最后一条匹配项。加载顺序是：先加载低优先级配置，然后追加全局规则，最后追加智能体规则。</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}</code></pre>
+
+<p>一个操作可能同时检查多个资源，比如一个补丁涉及多个文件。<strong>任意一个 <code>deny</code> 就否决整个操作</strong>；否则<strong>任意一个 <code>ask</code> 就询问</strong>；否则操作被放行。</p>
+
+<h2>动作一览（Actions）</h2>
+<p>V2 的动作名是普通字符串，所以插件可以定义更多动作。内置工具目前使用这些动作和资源：</p>
+
+<table>
+<thead>
+<tr><th>动作</th><th>资源</th></tr>
+</thead>
+<tbody>
+<tr><td><code>read</code></td><td>相对位置（Location）的内部路径，或规范化的外部绝对路径</td></tr>
+<tr><td><code>edit</code></td><td><code>edit</code>、<code>write</code>、<code>patch</code> 的目标路径</td></tr>
+<tr><td><code>glob</code></td><td>请求的 glob 模式</td></tr>
+<tr><td><code>grep</code></td><td>请求的正则表达式（不是搜索路径）</td></tr>
+<tr><td><code>shell</code></td><td>扫描器产出的命令字符串；复合命令可能产出多条</td></tr>
+<tr><td><code>subagent</code></td><td>目标智能体 ID</td></tr>
+<tr><td><code>skill</code></td><td>Skill ID</td></tr>
+<tr><td><code>question</code></td><td><code>*</code></td></tr>
+<tr><td><code>webfetch</code></td><td>请求的 URL</td></tr>
+<tr><td><code>websearch</code></td><td>搜索查询词</td></tr>
+<tr><td><code>experimental_image_generate</code></td><td>选定的图像模型，形如 <code>providerID/modelID</code>，设置了变体时再加 <code>#variant</code></td></tr>
+<tr><td><code>external_directory</code></td><td>规范化的外部目录边界，通常以 <code>/*</code> 结尾</td></tr>
+<tr><td><code>&lt;server&gt;_&lt;tool&gt;</code></td><td>MCP 工具为 <code>*</code>；两个名称中不支持的字符都变成 <code>_</code></td></tr>
+<tr><td><code>opencode_list_mcp_resources</code></td><td>MCP 服务器名称</td></tr>
+<tr><td><code>opencode_read_mcp_resource</code></td><td><code>&lt;server&gt;:&lt;uri&gt;</code></td></tr>
+<tr><td><code>execute</code></td><td><code>*</code>；设为 deny 会移除 Code Mode 并改为直接列出其工具，嵌套工具各自执行自己的规则</td></tr>
+</tbody>
+</table>
+
+<p>例如，只允许一个 skill、禁止其它所有 skill：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><code>doom_loop</code> 和 <code>lsp</code> <strong>不是</strong>当前 V2 核心的权限动作——旧文档里见过的话，那是过时的名称。</p>
+</aside>
+
+<h2>目录（Directories）</h2>
+<p>既不在当前活动位置（Location）之内、也不在其非根项目 worktree 之内的路径，会先按 <code>external_directory</code> 检查，再检查它的 <code>read</code> / <code>edit</code> 规则。默认策略允许 <code>external_directory</code>，所以外部路径默认不会触发提示，除非你自己加规则。想在任何项目外访问前先询问：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}</code></pre>
+
+<p>在它之后放更窄的规则，可以对特定目录放行或禁止：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}</code></pre>
+
+<p>这适用于 <code>read</code>、<code>edit</code>、<code>write</code> 和 <code>patch</code> 用到的外部路径。shell 在检查 <code>shell</code> 资源之前，会先检查它的外部工作目录和扫描器推断出的目录。</p>
+
+<p>对 <code>external_directory</code>、<code>read</code> 和 <code>edit</code>，开头是 <code>~</code>、<code>~/</code>、<code>$HOME</code> 或 <code>$HOME/</code> 的路径会在配置加载时被展开：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }</code></pre>
+
+<p>shell 资源保持原始命令文本，不做主目录展开。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>shell</code> 以宿主机用户的完整文件系统、进程和网络权限运行。从命令文本推断目录只是尽力而为，所以与其写一堆想识别「所有危险命令」的模式，不如直接维护一个<strong>窄的 shell 白名单</strong>。</p>
+</aside>
+
+<p>相对路径的修改类操作可能离开活动位置但仍在项目 worktree 之内。显式的外部路径在匹配前会先规范化，所以只对可信的目录边界做授权。</p>
+
+<h2>Shell 扫描器（Scanner）</h2>
+<p>shell 权限检查使用 OpenCode 内置的 shell 扫描器，覆盖 Bash、Zsh、POSIX <code>sh</code> 和 PowerShell。当命令语法畸形或包含扫描器无法安全分析的动态求值时，会返回一个扫描器错误，而不是执行未经校验的子命令：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    {
+      "permissions": [
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+      ],
+    },
+  ],
+}</code></pre>
+
+<p>权限规则、保存过的批准模式和尽力而为的目录推断，适用于每个提取出的子命令和 <code>cd</code> 目标。对未知目录没有额外的批准模式，也没有一刀切的限制。</p>
+
+<h2>默认策略（Defaults）</h2>
+<p>每个智能体（包括自定义智能体）都从这个有序的基础策略开始：</p>
+
+<div class="term-head"><span>jsonc</span><span>基础策略</span></div>
+<pre><code>[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]</code></pre>
+
+<p>随附的智能体会在其上追加这些策略：</p>
+
+<table>
+<thead>
+<tr><th>智能体</th><th>追加的策略</th></tr>
+</thead>
+<tbody>
+<tr><td><code>build</code></td><td>允许提问（questions）</td></tr>
+<tr><td><code>plan</code></td><td>允许提问；除 <code>~/.opencode/plan</code> 下的文件外禁止编辑</td></tr>
+<tr><td><code>general</code></td><td>禁止提问和启动子智能体</td></tr>
+<tr><td><code>explore</code></td><td>除 shell、读取、glob、grep、网页抓取、网页搜索和外部目录外全部禁止；读取 <code>.env</code> 时询问</td></tr>
+<tr><td><code>title</code></td><td>禁止所有动作</td></tr>
+<tr><td><code>summary</code></td><td>禁止所有动作</td></tr>
+<tr><td><code>compaction</code></td><td>保持基础策略</td></tr>
+</tbody>
+</table>
+
+<p>因为默认没有规则对 <code>external_directory</code> 设为 <code>ask</code>，所以位置和 worktree 之外的读写会<strong>不做提示直接进行</strong>。想恢复提示或阻止外部访问，按「目录」一节所示加一条 <code>external_directory</code> 的 <code>ask</code> 或 <code>deny</code> 规则。靠后的全局规则和智能体规则会覆盖这些默认值。</p>
+
+<h2>智能体专属权限（Agents）</h2>
+<p>共享规则放在顶层，更窄的规则放在 <code>agents.&lt;id&gt;.permissions</code> 下：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}</code></pre>
+
+<p>智能体规则是追加在全局规则<strong>之后</strong>的，不会替换全局数组。自定义子智能体使用<strong>自己的</strong>权限，而不是父智能体权限的子集。</p>
+
+<h2>批准（Approvals）</h2>
+<p>当一条规则解析为 <code>ask</code> 时，客户端可以用以下方式回复：</p>
+
+<table>
+<thead>
+<tr><th>选择</th><th>回复</th><th>结果</th></tr>
+</thead>
+<tbody>
+<tr><td>仅允许一次</td><td><code>once</code></td><td>只批准当前这一条待定请求</td></tr>
+<tr><td>总是允许</td><td><code>always</code></td><td>批准它，并把工具建议的模式保存到项目中</td></tr>
+<tr><td>拒绝</td><td><code>reject</code></td><td>拒绝它，以及该会话中所有其它待定的权限请求</td></tr>
+</tbody>
+</table>
+
+<p>例如，对 <code>git status --short</code> 选择「总是允许」，可能会保存一条覆盖后续 <code>git status</code> 命令的 shell 前缀：</p>
+
+<div class="term-head"><span>text</span><span>保存的模式</span></div>
+<pre><code>shell: git status * → allow</code></pre>
+
+<p>保存的批准是持久的、项目范围的 <code>allow</code> 规则。<strong>它们永远不会覆盖配置好的 <code>deny</code></strong>。保存的模式由工具自己提议：有的工具提议 <code>*</code>，shell 提议命令前缀，skill 和子智能体提议各自的 ID。请定期检查宽泛的批准并删掉不再需要的。</p>
+
+<p>客户端可以在拒绝时附加反馈。非交互式客户端必须自己决定如何处理批准请求；配置好的 <code>deny</code> 规则始终强制生效。</p>
+
+<h2>策略（Policies）</h2>
+<p><a href="policies.html">策略（Policy）</a>可以在上述规则和保存的批准都跑完之后，对一次权限检查做硬性拒绝。它把 <code>allow</code> 或 <code>ask</code> 变成 <code>deny</code>，永远不会授予访问：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>权限是「你自己给家里定的规矩」，策略是「物业/公司强制执行的规定」。哪怕你的项目配置里写了 <code>allow</code>，组织和 Console 下发的策略仍能把它硬生生压成 <code>deny</code>——全局策略和 Console 管理的策略覆盖项目配置，组织就是这样拦住某个仓库本身想放行的命令的。这是企业落地的最后一道闸。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作区 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-workspaces" data-group="Console" data-src="https://opencode.ai/docs/console/workspaces/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>工作区</h1>
+<p class="lede">工作区（Workspace）是 Console 中一切内容的容器：成员、额度、预算、提供商、策略和服务账号都在里面。用量和账单按工作区追踪。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>工作区就是 Console 里的「一个独立账本+一个独立王国」：它有自己的成员名单、自己的钱（额度）、自己的规矩（策略）。公司可以开一个工作区给全员用，个人可以只用自己的 <strong>Personal</strong> 工作区，接私活的甚至可以给每个客户各开一个，账目互不干扰。工作区可以只有一个成员——额度、<a href="console-providers.html">自己的提供商</a>、预算、<a href="console-go.html">Go</a> 订阅一个人也能全用上，<a href="console-members.html">邀请成员</a>这件事等真需要时再说。</p>
+</aside>
+
+<h2>你的第一个工作区</h2>
+<p>注册时 Console 会自动创建一个名为 <strong>Personal</strong> 的工作区，你是它的所有者（Owner）兼唯一成员。如果你是从别人的邀请注册进来的，则会直接加入邀请方的工作区，不会创建 Personal 工作区。</p>
+
+<h2>创建工作区</h2>
+<ol>
+<li>打开顶栏的工作区菜单。</li>
+<li>点击 <strong>Create Workspace</strong>。</li>
+<li>输入<strong>工作区名称</strong>，点击 <strong>Create</strong>。</li>
+</ol>
+<p>你将成为新工作区的所有者。</p>
+
+<h2>切换工作区</h2>
+<p>在工作区菜单里选择另一个工作区即可。Console 会让你停留在同一个页面上——从 <code>/acme/settings/members</code> 切换过去时，打开的是另一个工作区的 Members 页。</p>
+<p>待处理的邀请会出现在同一个菜单的顶部。见 <a href="console-members.html#accept-an-invitation">Members</a>。</p>
+
+<h2>连接 OpenCode</h2>
+<p>在 OpenCode 里运行 <code>/connect</code>，然后在浏览器中选择工作区。此后 OpenCode 会使用该工作区的模型、策略和预算。</p>
+<div class="term-head"><span>OpenCode 命令</span><span></span></div>
+<pre><code>/connect</code></pre>
+<p>再次运行 <code>/connect</code> 可以把 OpenCode 切换到另一个工作区。工作区<a href="policies.html#console">策略</a>会被替换成新工作区的策略，断开连接时会被清除。</p>
+
+<h2>角色</h2>
+<p>每位成员拥有且只有一个角色。新成员总是以 <strong>Member</strong>（成员）身份加入。</p>
+<table>
+<thead><tr><th>角色</th><th>可以做什么</th></tr></thead>
+<tbody>
+<tr><td>Member（成员）</td><td>使用 OpenCode，查看自己的用量、日志和预算。</td></tr>
+<tr><td>Admin（管理员）</td><td>成员的一切权限，外加管理成员、账单、预算、提供商、策略、服务账号和设置。</td></tr>
+<tr><td>Owner（所有者）</td><td>管理员的一切权限，外加管理 SSO 和目录同步、授予 Owner 角色、删除工作区。</td></tr>
+</tbody>
+</table>
+<p>成员在 <strong>Activity</strong> 页查看自己的用量和日志；如果排行榜对成员可见，也能看到排行榜。当工作区订阅了 <a href="console-go.html">Go Teams</a> 时，成员还能看到 <strong>Go</strong> 页，查看自己的上限。他们从账号菜单打开 <strong>Account</strong>。</p>
+
+<h3>角色规则</h3>
+<ul>
+<li>一个工作区可以有多个所有者，并且始终至少保留一个。</li>
+<li>你不能授予比自己高的角色，所以只有所有者能任命新的所有者。</li>
+<li>你不能更改自己的角色。</li>
+</ul>
+
+<h3>转让所有权</h3>
+<ol>
+<li>以所有者身份打开 <strong>Settings › Members</strong>，把新所有者的角色设为 <strong>Owner</strong>。</li>
+<li>让新所有者把你的角色改为 <strong>Admin</strong> 或 <strong>Member</strong>。</li>
+</ol>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>转让所有权是个「两步接力」：先由现任 Owner 把对方提成 Owner，再由对方把自己降级。这个设计保证了「至少一名 Owner」的底线永远不破，也意味着你<strong>没法单方面把工作区丢给别人</strong>——必须对方配合完成第二步。</p>
+</aside>
+
+<h2>删除工作区</h2>
+<p>只有所有者能删除工作区，且必须至少还属于另一个工作区。</p>
+<ol>
+<li>打开 <strong>Settings › General</strong>，点击 <strong>Delete workspace</strong>。</li>
+<li>勾选每一项确认声明。</li>
+<li>点击 <strong>Delete workspace</strong> 确认。</li>
+</ol>
+<p>删除立即生效且<strong>不可撤销</strong>：</p>
+<ul>
+<li>成员立即失去访问权限。</li>
+<li>所有服务账号 API key 和待处理邀请被吊销。</li>
+<li>自动充值停止。</li>
+<li>进行中的 Go 订阅终止。</li>
+<li>剩余的额度余额被没收。</li>
+</ul>
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>有支付正在处理时，删除会被阻止，几分钟后重试即可。删除前把剩余额度用完或想清楚——余额会随工作区一起消失，不会退给你。</p>
+</aside>
+
+<h2>退出工作区</h2>
+<ol>
+<li>从账号菜单打开 <strong>Account</strong>。</li>
+<li>在 <strong>Connected workspaces</strong> 下，点击工作区旁边的 <strong>Leave</strong>。</li>
+<li>点击 <strong>Leave workspace</strong> 确认。</li>
+</ol>
+<p>最后一位所有者不能退出——先把别的成员提成所有者。在启用了 SSO 或目录同步的工作区里，成员身份由你的身份提供商（IdP）管理，所以无法从 Console 退出。退出后想重新加入，需要重新索取一份邀请。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>SSO/目录同步工作区「Console 里退不掉」不是 bug 而是设计：成员名单的权威来源（source of truth）是身份提供商，比如公司 Okta 或 Azure AD。要离开这类工作区，得让 IT 管理员在 IdP 那边把你移出对应的组，同步之后你的 Console 成员身份自然消失。详见 <a href="console-sso.html">SSO</a> 和 <a href="console-scim.html">SCIM</a> 两章。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API 概览 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-api" data-group="Console" data-src="https://opencode.ai/docs/console/api/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>API 概览</h1>
+<p class="lede">Console API 让你的脚本和集成程序可以直接调用模型。每个请求都用 API key 完成认证。</p>
+
+<div class="term-head"><span>bash</span><span>列出可用模型</span></div>
+<pre><code>curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."</code></pre>
+
+<table>
+<thead>
+<tr><th>API</th><th>端点</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="console-api-models.html">Models（模型）</a></td><td><code>https://opencode.ai/console/api/v1/models</code></td></tr>
+<tr><td><a href="console-api-inference.html">Inference（推理）</a></td><td><code>https://opencode.ai/inference/...</code></td></tr>
+<tr><td><a href="console-api-providers.html">Providers（提供商）</a></td><td><code>https://opencode.ai/inference/custom/...</code></td></tr>
+</tbody>
+</table>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把 Console API 想成「给机器用的 Console 网页版」：你在网页上能做的事（看模型、发推理请求、管预算），脚本也能通过 API 做。三个入口各有分工——<strong>Models</strong> 负责列出你有哪些模型可用；<strong>Inference</strong> 负责真正调用模型、拿到回复；<strong>Providers</strong> 负责接你自己的自定义提供商。而打开这扇门的钥匙就是 API key（形如 <code>oc_sk_...</code> 的密钥）。</p>
+</aside>
+
+<h2>API keys</h2>
+<p>工作区成员（workspace member）和服务账号（service account）都可以持有 API key。调用时把 key 作为 bearer token 放进请求头：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Authorization: Bearer oc_sk_...</code></pre>
+
+<table>
+<thead>
+<tr><th></th><th>个人 API key（Personal API key）</th><th>服务账号 key（Service account key）</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>由谁创建</strong></td><td>任意成员，为自己创建</td><td>Owner 和管理员（admin）</td></tr>
+<tr><td><strong>在哪里创建</strong></td><td><strong>Account › Personal API keys</strong></td><td><strong>Settings › Service accounts</strong></td></tr>
+<tr><td><strong>以谁的身份行事</strong></td><td>创建它的那个成员</td><td>对应的服务账号</td></tr>
+<tr><td><strong>用量计入谁的</strong></td><td>该成员的<a href="console-budgets.html#member-budgets">预算（budget）</a></td><td>该服务账号的<a href="console-budgets.html#service-account-budgets">预算</a></td></tr>
+<tr><td><strong>适合场景</strong></td><td>你自己的脚本和 <a href="console-harnesses.html">Harnesses</a></td><td>CI、共享机器、集成程序</td></tr>
+</tbody>
+</table>
+
+<ul>
+<li>每个 key 只属于<strong>一个工作区</strong>，在创建时选定，请求时无需再带工作区 header。</li>
+<li>完整 key 只在<strong>创建后的那一刻显示一次</strong>，之后 Console 里只能看到它的前缀。</li>
+<li><strong>过期时间（Expiration）</strong>可选：<strong>Never（永不过期）</strong>、<strong>1 天</strong>、<strong>7 天</strong>、<strong>30 天</strong>，或<strong>自定义（Custom，1 到 365 天）</strong>。过期的 key 无法续期，只能新建一个。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>完整 key <strong>只显示一次</strong>——弹出来的那一刻就要复制保存好（建议放进密码管理器或 CI 的密钥变量里），关掉弹窗后就再也找不回来了，只能删掉重建。另外，过期的 key 不能「续命」，必须新建并替换掉所有用到它的地方。</p>
+</aside>
+
+<h2>个人 API keys</h2>
+<p>个人 key 以<strong>你本人</strong>的身份行事。你的角色（role）、<a href="console-budgets.html#member-budgets">预算</a>和模型规则都会自动作用到它身上。</p>
+<ol>
+<li>从账号菜单打开 <strong>Account</strong>，找到 <strong>Personal API keys</strong>。</li>
+<li>点击 <strong>Add API key</strong>。</li>
+<li>选择<strong>工作区（Workspace）</strong>、填写 <strong>Key name</strong>，可选填<strong>过期时间（Expiration）</strong>。Owner 和管理员还能选择<strong>权限（Permissions）</strong>。</li>
+<li>点击 <strong>Create</strong>，复制生成的 key。</li>
+</ol>
+
+<div class="term-head"><span>text</span><span>key 的样例格式</span></div>
+<pre><code>oc_sk_1a2b3c4d5e6f_...</code></pre>
+
+<p>这个 key 跟随你<strong>当前</strong>对该工作区的访问权限：你的角色变了，key 能做的事也跟着变。如果工作区启用了 <a href="console-sso.html#sso-enforcement">SSO 强制登录</a>，那么除非你是 owner，否则这个 key 只在你有活跃 SSO 会话时才能使用。</p>
+
+<h2>服务账号</h2>
+<p>服务账号（service account）是工作区里的「非人类成员」，拥有自己的 API key、用量和<a href="console-budgets.html#service-account-budgets">预算</a>。把自动化任务挂在它名下，用量就不会算到某个具体的人头上。它由 Owner 和管理员管理。</p>
+<ol>
+<li>打开 <strong>Settings › Service accounts</strong>，点击 <strong>Add Service Account</strong>，起个名字，例如 <code>CI Pipeline</code>。</li>
+<li>进入这个服务账号，点击 <strong>Add API Key</strong>。</li>
+<li>填写 <strong>Key name</strong>、可选的<strong>过期时间（Expiration）</strong>和<strong>权限（Permissions）</strong>，然后点击 <strong>Create</strong>。</li>
+<li>复制 key。</li>
+</ol>
+
+<div class="term-head"><span>bash</span><span>把 key 存进环境变量</span></div>
+<pre><code>export SERVICE_API_KEY="oc_sk_..."</code></pre>
+
+<p>Owner 和管理员之后还能通过 key 操作菜单里的 <strong>Edit…</strong> 重命名服务账号的 key，或修改它的权限。</p>
+
+<h2>权限</h2>
+<p>每个 key 都有一个权限级别，在创建时的 <strong>Permissions</strong> 下选择：</p>
+
+<table>
+<thead>
+<tr><th>权限级别</th><th>允许做什么</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>All（全部）</strong></td><td>该成员或服务账号能做的一切，唯独不包括 <strong>This account's API keys</strong>。</td></tr>
+<tr><td><strong>Restricted（受限）</strong></td><td>只做你勾选的资源相关的事。</td></tr>
+<tr><td><strong>Read only（只读）</strong></td><td>对所有资源只读。可以列出模型，但不能调用它们。</td></tr>
+</tbody>
+</table>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>权限的「天花板」原则：key 永远<strong>不能比它的主人更能干</strong>。个人 key 的上限是你当前的角色权限，服务账号 key 的上限是服务账号本身能做的事。所以如果你只是个普通成员，就算想给 key 开「全部权限」也开不出来——这保证了不会有人绕过角色体系拿到额外的能力。</p>
+</aside>
+
+<h3>受限 key（Restricted keys）</h3>
+<p>选了 <strong>Restricted</strong> 之后，可以为每类资源分别设置 <strong>None（无）</strong>、<strong>Read（读）</strong> 或 <strong>Write（写）</strong>。<strong>Write</strong> 包含 <strong>Read</strong> 的能力。</p>
+
+<table>
+<thead>
+<tr><th>资源</th><th>可选级别</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Models（模型）</strong></td><td><strong>Read</strong>、<strong>Request</strong></td></tr>
+<tr><td><strong>Usage（用量）</strong></td><td><strong>Read</strong></td></tr>
+<tr><td><strong>Budgets（预算）</strong></td><td><strong>Read</strong>、<strong>Write</strong></td></tr>
+<tr><td><strong>Members（成员）</strong></td><td><strong>Read</strong>、<strong>Write</strong></td></tr>
+<tr><td><strong>Providers（提供商）</strong></td><td><strong>Read</strong>、<strong>Write</strong></td></tr>
+<tr><td><strong>Billing（账单）</strong></td><td><strong>Read</strong>、<strong>Write</strong></td></tr>
+<tr><td><strong>Workspace settings（工作区设置）</strong></td><td><strong>Read</strong>、<strong>Write</strong></td></tr>
+<tr><td><strong>SSO</strong></td><td><strong>Read</strong></td></tr>
+<tr><td><strong>Service accounts（服务账号）</strong></td><td><strong>Read</strong></td></tr>
+<tr><td><strong>This account's API keys（本账号的 API key）</strong></td><td><strong>Write</strong></td></tr>
+</tbody>
+</table>
+
+<p><strong>Models › Read</strong> 只能列出模型；<strong>Models › Request</strong> 则额外允许通过 <a href="console-api-inference.html">Inference</a> 和 <a href="console-api-providers.html">Providers</a> API 真正调用模型。举例：一个只用来调用模型的 key，这样配置就够了：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Permissions: Restricted
+Models:      Request</code></pre>
+
+<p>在引入细分权限之前创建的 <strong>Inference only</strong> key，现在会显示为 <strong>Restricted</strong>，且 <strong>Models</strong> 已设为 <strong>Request</strong>。</p>
+
+<h3>谁能授予什么</h3>
+<ul>
+<li><strong>普通成员</strong>只能创建「列出并调用模型」的个人 key。Console 不会给他们权限选项，而是直接显示一句提示：「This key can list and call models as you.」（此 key 可以以你的身份列出并调用模型。）</li>
+<li><strong>Owner 和管理员</strong>可以给自己的个人 key 选 <strong>All</strong>、<strong>Restricted</strong> 或 <strong>Read only</strong>，上限是自己角色的能力。默认值是 <strong>Restricted</strong> 且 <strong>Models</strong> 设为 <strong>Request</strong>。如果他们之后被降级，他们的 key 的权限也会随之收缩。</li>
+<li><strong>服务账号 key</strong>默认为 <strong>All</strong>，由 Owner 和管理员来设定权限。</li>
+</ul>
+
+<h3>限制（Limitations）</h3>
+<p>有些操作永远需要真人登录 Console，用 key 创建 key 的行为也被严格限制：</p>
+<ul>
+<li>任何 API key 都不能修改 SSO 设置，也不能删除工作区。</li>
+<li>服务账号 key 不能邀请成员、更改角色、移除成员、管理账单、修改工作区设置、管理模型，也不能创建或删除服务账号——即使持有 <strong>All</strong> 权限也一样。</li>
+<li><strong>This account's API keys</strong> 只出现在服务账号 key 上，而且 <strong>All</strong> 并不包含它。持有它的 key 只能为<strong>它自己所属的服务账号</strong>创建和吊销 key。新建的 key 必须是 <strong>Restricted</strong>、不能超出创建它的 key 的权限范围，也不能再带上 <strong>This account's API keys</strong>。</li>
+<li>个人 key 永远拿不到 <strong>This account's API keys</strong>，并且任何 API key 都不能创建或吊销个人 API key。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>超出 key 权限范围的请求会返回 HTTP <code>403</code>（禁止访问）。如果你的脚本突然集体报 403，先检查是不是 key 的权限被改过、key 的主人被降级过，或者 key 已经过期/被吊销（那种情况通常返回 <code>401</code>）。</p>
+</aside>
+
+<h2>吊销（Revocation）</h2>
+
+<table>
+<thead>
+<tr><th>Key 类型</th><th>谁能吊销</th><th>在哪里操作</th></tr>
+</thead>
+<tbody>
+<tr><td>个人 API key</td><td>持有它的成员本人</td><td><strong>Account › Personal API keys</strong>，然后 <strong>Revoke</strong></td></tr>
+<tr><td>个人 API key</td><td>Owner 和管理员</td><td><strong>Settings › Members</strong> 中该成员的页面，<strong>API Keys</strong> 一栏</td></tr>
+<tr><td>服务账号 key</td><td>Owner 和管理员</td><td><strong>Settings › Service accounts</strong> 中该服务账号的页面，<strong>API Keys</strong> 一栏</td></tr>
+</tbody>
+</table>
+
+<p>除了手动吊销，key 还会被<strong>自动吊销</strong>：</p>
+<ul>
+<li>离开或被移出工作区，或通过 <a href="console-scim.html">SCIM</a> 被取消配置（deprovision），会吊销这个人在该工作区创建的所有 key，包括其创建的服务账号 key。同一服务账号上由其他人创建的 key 不受影响，继续可用。</li>
+<li>删除一个服务账号会吊销它的全部 key。</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>被吊销和已过期的 key 会<strong>立即失效</strong>，并返回 HTTP <code>401</code>（未认证）。所以接到 401 不一定是 key 写错了，也可能是它刚被吊销或过期。一个良好的实践是在 CI 里定期轮换 key（配合可选的过期时间），这样即使某把 key 泄露，暴露窗口也是有限的。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

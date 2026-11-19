@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RPC · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-plugins-rpc" data-group="构建与集成" data-src="https://opencode.ai/docs/build/plugins/rpc/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>RPC</h1>
+<p class="lede">插件可以暴露自定义方法和事件，让它们运行在服务器上，并能被其它插件或客户端调用。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>RPC 是插件的「对外服务窗口」：服务器部分在 <code>src/rpc.ts</code> 里<strong>声明契约</strong>（有哪些方法、收什么参数、返回什么、可能报什么错、广播哪些事件），再在 <code>setup</code> 里<strong>实现</strong>它；之后无论是 HTTP 客户端、TUI 插件还是 GUI 插件，都拿着同一份契约来调用——类型检查两边都生效，就像调用本地函数一样。</p>
+</aside>
+
+<h2>定义（Define）</h2>
+<p>用 <code>Rpc.define</code> 列出 RPC 的方法、错误和事件：</p>
+
+<div class="term-head"><span>src/rpc.ts</span><span>TypeScript</span></div>
+<pre><code>import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})</code></pre>
+
+<h3>校验（Validation）</h3>
+<p>RPC 定义描述方法、事件和错误的输入输出形状。支持两种 schema 格式：</p>
+<ul>
+<li>JSON Schema——简单，且无需额外依赖。</li>
+<li>任何符合 <a href="https://standardschema.dev" target="_blank" rel="noopener">Standard Schema</a> 的校验器：
+<ul>
+<li>Zod</li>
+<li>Valibot</li>
+<li>ArkType</li>
+</ul>
+</li>
+</ul>
+
+<h3>输入与输出（Input and output）</h3>
+<p>每个方法可以为参数定义 <code>input</code> schema，为返回值定义 <code>output</code> schema。方法不接收或不返回值时，任一都可以省略：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}</code></pre>
+
+<p>JSON Schema 的值在 TypeScript 里是 <code>unknown</code>，所以使用前要先收窄类型。Standard Schema 则能直接推断输入输出类型。</p>
+
+<h3>错误（Errors）</h3>
+<p>给方法添加 <code>errors</code> 映射来声明预期失败。每个键会成为错误的 <code>type</code>，其 schema 定义错误的 <code>data</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>以 <code>rpc.</code> 开头的错误名被 OpenCode 保留，自定义错误别用这个前缀。</p>
+</aside>
+
+<h3>事件（Events）</h3>
+<p>把事件添加到顶层的 <code>events</code> 映射。每个事件都有一个 schema，描述发给订阅者的数据。</p>
+
+<p>事件数据必须是对象。没有数据时用空对象 schema：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}</code></pre>
+
+<p>标量、数组、<code>null</code> 和 <code>undefined</code> 都不是合法的事件数据。</p>
+
+<h2>实现（Implement）</h2>
+<p>在 <code>setup</code> 里注册实现：</p>
+<div class="term-head"><span>src/index.ts</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) =&gt; {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})</code></pre>
+
+<p>注册 RPC 之后，同一个插件就能通过 <code>ctx.rpc(Acme)</code> 调用它。</p>
+
+<p>实现的第二个参数包含用于取消的 <code>signal</code>，以及用于声明错误的 <code>context.error(...)</code>。错误可以返回，也可以抛出。</p>
+
+<p>一个插件可以注册多个 RPC。销毁注册即可移除。</p>
+
+<h2>调用（Call）</h2>
+<p>RPC 注册之后，可以通过 HTTP 或从另一个插件调用它。</p>
+
+<h3>HTTP</h3>
+<p>创建一个 OpenCode 客户端，然后用 <code>client.rpc</code> 为这个 RPC 创建子客户端：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })</code></pre>
+
+<h3>插件（Plugin）</h3>
+<p>插件本来就有一个 OpenCode 客户端。例如 TUI 插件可以从 <code>context.client</code> 创建同样的 RPC 子客户端：</p>
+<div class="term-head"><span>src/tui.ts</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})</code></pre>
+
+<p><a href="build-plugins-gui.html">GUI 插件</a>则从 <code>ctx.client</code> 读取桌面应用自己那个服务器的客户端：</p>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () =&gt; {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})</code></pre>
+
+<p>在使用处读取 <code>ctx.client</code>：服务器重启后它会变化。服务器不可达期间，每次调用都会 reject。</p>
+
+<h3>订阅（Subscribe）</h3>
+<p>用 <code>events.on</code> 注册回调，监听器不再需要时取消订阅：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const unsubscribe = acme.events.on("updated", (event) =&gt; {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()</code></pre>
+
+<p>要异步可迭代对象，用 <code>events.subscribe("updated")</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}</code></pre>
+
+<p>事件订阅是「活性」的（live only），断开连接的订阅者会错过事件：</p>
+<ul>
+<li>订阅时用本地名，比如 <code>updated</code>。</li>
+<li>收到的事件类型带前缀，比如 <code>rpc.acme.updated</code>。</li>
+<li>每个事件都包含 <code>data</code> 和 <code>location</code>。</li>
+<li>插件卸载会关闭它的订阅。</li>
+</ul>
+
+<p>外部客户端会收到<strong>所有位置</strong>的事件，所以需要时检查 <code>event.location</code>。前提是服务器插件已被配置并正在运行。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>发布技巧：把 <code>rpc.ts</code> 单独作为包的 <code>./rpc</code> 导出（见<a href="build-plugins.html">插件总览</a>的 <code>exports</code> 示例）。这样其它插件和外部客户端可以只导入契约（拿到类型和 schema），而不必加载你的实现代码——这也是官方推荐在发布时单独导出 <code>./rpc</code> 的原因。另外，在 Effect 生态里还有一套对应的 <a href="build-plugins-effect-rpc.html">Effect RPC</a> 写法。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TUI 界面 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-tui" data-group="CLI" data-src="https://opencode.ai/docs/cli/tui/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>TUI 界面</h1>
+<p class="lede">TUI（终端用户界面）是 OpenCode 的主战场：在项目里启动、输入需求、按回车，剩下的交给它。这一页讲清发消息、附加上下文、切模型、管会话等全部日常操作。</p>
+
+<h2>快速开始</h2>
+<p>进入你的项目目录并启动：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>cd ~/code/my-project
+opencode</code></pre>
+<p>然后输入你的需求，例如：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Explain how authentication works in this project</code></pre>
+<p>按 <kbd>Enter</kbd> 发送。想换行输入，按 <kbd>Shift+Enter</kbd>、<kbd>Ctrl+Enter</kbd>、<kbd>Alt+Enter</kbd> 或 <kbd>Ctrl+J</kbd>。OpenCode 正在工作时，<kbd>Enter</kbd> 用于给当前会话「引路」（追加指示）；先按 <kbd>Ctrl+X</kbd> 再按 <kbd>Enter</kbd>，可以把 prompt 排进队列稍后发送。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>「工作Enter 引导、Ctrl+X+Enter 排队」的分工可以这样记：模型正在干活时你按 Enter，相当于<strong>隔着门喊话提醒它</strong>——它收到后会调整方向；而 <kbd>Ctrl+X</kbd> + <kbd>Enter</kbd> 是<strong>在门口放了个纸条</strong>，等它干完手头的事再按纸条上的新任务开始下一轮。</p>
+</aside>
+
+<h2>上下文：@ 引用文件</h2>
+<p>输入 <code>@</code> 可以搜索文件，选中后会把该文件附加到 prompt 里。在 <code>@</code> 之后继续输入可以缩小搜索范围：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Review @src/auth.ts for error handling problems</code></pre>
+<p>路径后还可以带上行号或行号区间：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Explain @src/auth.ts#20-45</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>@</code> 是在空格后触发的文件搜索，不是普通的字符——如果你在路径中间手动补了个 <code>@</code> 并期望它自动搜索，那是不行的。正确姿势是删除后重新输入 <code>@</code>，让搜索框弹出来再选择。另外引用大文件时尽量配合行号区间（如 <code>#20-45</code>），能显著减少 token 消耗。</p>
+</aside>
+
+<h2>Shell：! 执行命令</h2>
+<p>在空 prompt 的开头输入 <code>!</code> 进入 shell 模式。输入命令后按 <kbd>Enter</kbd> 执行；按 <kbd>Esc</kbd> 可以不执行就退出 shell 模式：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>!git status</code></pre>
+<p>Shell 命令在会话的工作目录中运行，其输出会留在会话里——模型之后可以直接看到这些输出内容。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「输出留在会话里」是这个功能的精髓：相当于你在跟同事讨论时顺手贴了一张终端截图。比如你先 <code>!npm test</code> 看到一堆报错，接着直接问「为什么这些测试失败了」，模型能引用刚才的报错输出作答，不用你复制粘贴。</p>
+</aside>
+
+<h2>斜杠命令</h2>
+<p>输入 <code>/</code> 会列出所有斜杠命令。继续输入可以过滤列表，选中后按 <kbd>Enter</kbd> 执行：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/models</code></pre>
+<p>常用命令包括 <code>/new</code>、<code>/sessions</code>、<code>/models</code>、<code>/agents</code>、<code>/undo</code>、<code>/redo</code> 和 <code>/editor</code>。按 <kbd>Ctrl+P</kbd> 可以打开命令面板（command palette），看到当前视图下所有可用操作。命令的完整清单见<a href="cli-commands.html">TUI 命令</a>一页。</p>
+<p>OpenCode 更新后，会在主页一次性显示本次发布的新功能亮点。想再看一次可以运行 <code>/highlights</code>；在 <a href="cli-config.html">cli.json</a> 里把 <code>"highlights"</code> 设为 <code>false</code> 则不再自动弹出。</p>
+
+<h3>边问边聊：/btw</h3>
+<p>运行 <code>/btw &lt;问题&gt;</code> 可以针对目前的对话内容快速提一个小问题。回答会使用会话的上下文和当前模型，但<strong>不会加入对话记录</strong>，因此不影响后续 prompt。运行期间 prompt 底栏会显示一个 <code>/btw</code> 指示器，答案以对话框形式弹出，按 <kbd>C</kbd> 可以复制：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/btw why did the test in step 2 fail?</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p><code>/btw</code>（by the way，顺便问一句）就像开会时的小声嘀咕：你听着听着不明白，私下问一句「刚才第二步为什么失败」，得到的解答<strong>不会被记进会议纪要</strong>——主对话的上下文干干净净，不会因为这次插问而跑偏。省钱、不干扰主线，一举两得。</p>
+</aside>
+
+<h2>切换模型与 Agent</h2>
+<p>按 <kbd>Ctrl+X</kbd> 再按 <kbd>M</kbd> 选择模型，或直接运行 <code>/models</code>。按 <kbd>F2</kbd> 可以在最近用过的模型之间循环切换。</p>
+<p>按 <kbd>Ctrl+X</kbd> 再按 <kbd>A</kbd> 选择 agent，或运行 <code>/agents</code>。按 <kbd>Shift+Tab</kbd> 在 agent 之间循环切换。</p>
+
+<h2>会话与标签页</h2>
+<p>按 <kbd>Ctrl+X</kbd> 再按 <kbd>N</kbd> 开启新会话。按 <kbd>Ctrl+X</kbd> 再按 <kbd>L</kbd> 或运行 <code>/sessions</code> 回到已有会话；<kbd>Ctrl+O</kbd> 可以同时打开最近的会话和项目。</p>
+<p>标签页默认开启。用 <kbd>Ctrl+Tab</kbd> 和 <kbd>Ctrl+Shift+Tab</kbd> 在标签页之间移动，<kbd>Ctrl+X</kbd> 再按 <kbd>W</kbd> 关闭当前标签页，<kbd>Ctrl+Shift+T</kbd> 重新打开最近关闭的标签页。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>标签页和会话是两层概念：一个标签页里跑着一个会话，多个标签页可以并行推进不同任务（比如一个在改 bug，一个在写文档）。会话本身不会因为关闭标签页而消失，随时可以从 <code>/sessions</code> 里捞回来接着用。</p>
+</aside>
+
+<h2>撤销与重做</h2>
+<p>按 <kbd>Ctrl+X</kbd> 再按 <kbd>U</kbd>，或运行 <code>/undo</code>，可以撤销最近一条用户消息以及它之后的所有工作。被撤销的 prompt 会回到输入框，方便你改完再发。</p>
+<p>按 <kbd>Ctrl+X</kbd> 再按 <kbd>R</kbd>，或运行 <code>/redo</code>，可以恢复刚才撤销的工作。注意：如果你直接发送了新的 prompt，相当于接受这次撤销，从当前状态继续往后走。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>「发送新 prompt 会吃掉 redo 的机会」这个细节很容易踩坑：撤销后临时起意问了个别的问题，再想恢复刚才的工作就来不及了。如果还想回去，先把新想法记在别处，用 <code>/redo</code> 恢复原工作后再说。</p>
+</aside>
+
+<h2>外部编辑器</h2>
+<p>设置好 <code>VISUAL</code> 或 <code>EDITOR</code> 环境变量后，按 <kbd>Ctrl+X</kbd> 再按 <kbd>E</kbd>，或运行 <code>/editor</code>，可以在那个编辑器里编辑当前 prompt。保存退出后文本回到输入框，再按 <kbd>Enter</kbd> 发送：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>export EDITOR="nvim"
+opencode</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>外部编辑器适合「长 prompt」：要写一段好几行的需求描述、贴大段代码时，在 vim 或 VS Code 里编辑比在 TUI 输入框里舒服得多。快捷键的默认前导键是 <kbd>Ctrl+X</kbd>，想改成别的（比如 Emacs 风格）见<a href="cli-keybinds.html">快捷键</a>一页。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

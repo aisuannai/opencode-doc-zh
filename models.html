@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="models" data-group="配置" data-src="https://opencode.ai/docs/models/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>模型</h1>
+<p class="lede">会话里用 <code>/models</code> 选模型；配置文件里设默认模型；变体（variant）用来指定推理强度；本地 Ollama、LM Studio、vLLM 模型自动发现。这一页把模型相关的所有配置讲清楚。</p>
+
+<p>在会话中用 <code>/models</code> 为当前会话选一个模型：</p>
+
+<div class="term-head"><span>TUI 命令</span><span></span></div>
+<pre><code>/models</code></pre>
+
+<p>OpenCode 会列出来自 <a href="https://models.dev" target="_blank" rel="noopener">models.dev</a>、提供商集成和你自己配置的模型。选择器只显示已启用、且其提供商在当前项目中可用的模型。提供商的连接见 <a href="providers.html">Providers</a> 一章。</p>
+
+<h2>选择模型</h2>
+<p>直接从 <code>/models</code> 里挑一个条目，不用去猜它的提供商或模型 ID。选择只作用于当前会话，不会改动你的配置文件：</p>
+
+<div class="term-head"><span>text</span><span>选择器中的条目</span></div>
+<pre><code>anthropic/claude-sonnet-5-5</code></pre>
+
+<p>模型的可用性是按项目区分的：</p>
+<ul>
+<li>模型必须是启用状态。</li>
+<li>它的提供商必须在当前项目中可用。</li>
+<li>另一个项目的凭据和配置不会自动带过来。</li>
+</ul>
+
+<h2>单次运行</h2>
+<p>用 <code>--model</code> 给一次命令行运行临时指定模型，而不改变配置的默认值：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"</code></pre>
+
+<p>智能体和自定义命令也可以各自指定模型。见 <a href="agents.html">Agents</a> 和 <a href="commands.html">自定义命令</a>。</p>
+
+<h2>默认模型</h2>
+<p>在 <code>opencode.json</code> 或 <code>opencode.jsonc</code> 里设置 <code>model</code>，作为新工作的默认模型：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}</code></pre>
+
+<p>当配置的模型已启用且其提供商可用时，它会成为模型目录里的默认项。否则 OpenCode 回退到最新的可用受支持模型。</p>
+
+<ul>
+<li>会话里已经选定的模型优先于配置的默认值。</li>
+<li>切换会话的模型不会改写配置文件。</li>
+<li>根级 <code>model</code> 目前只保留默认的提供商和模型，不保留变体。</li>
+</ul>
+
+<p>配置文件的位置和优先级见 <a href="config.html">配置</a>一章。</p>
+
+<h2>免费模型</h2>
+<p>在服务器进程上设置 <code>OPENCODE_DISABLE_FREE_MODELS=1</code>（或 <code>true</code>）可以隐藏 OpenCode 的<a href="https://opencode.ai/console" target="_blank" rel="noopener">免费模型</a>：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>OPENCODE_DISABLE_FREE_MODELS=1 opencode serve</code></pre>
+
+<p>对于共享的后台服务器：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set env OPENCODE_DISABLE_FREE_MODELS 1</code></pre>
+
+<p>「免费」指没有输入价格的 <code>opencode</code> 或 <code>opencode-go</code> 模型。隐藏后这些模型会从目录和默认值中消失；显式选择会报 <code>Model unavailable</code> 错误。未登录时，在你连接 OpenCode Console 账号或设置 <code>OPENCODE_API_KEY</code> 之前，<code>opencode</code> 提供商本身不存在；登录或设置密钥后会恢复它的付费模型。</p>
+
+<h2>变体（Variants）</h2>
+<p>变体是同一个模型的具名选项，通常用来表示推理力度（reasoning effort）或 token 预算。选择时在模型后面加 <code>#variant</code>，可用于单次运行、会话、智能体或命令：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"</code></pre>
+
+<p>变体名称来自所选模型当前的目录元数据。<code>low</code>、<code>high</code>、<code>max</code> 这类名字不是每个模型都有，写了一个不存在的变体会导致模型解析错误。</p>
+
+<p>在模型的 <code>variants</code> 数组里可以定义新变体，或者用相同 ID 替换目录里的变体：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>定义变体</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "settings": {
+            "reasoningEffort": "medium",
+          },
+          "variants": [
+            {
+              "id": "fast",
+              "settings": {
+                "reasoningEffort": "low",
+              },
+            },
+            {
+              "id": "deep",
+              "settings": {
+                "reasoningEffort": "high",
+                "reasoningSummary": "auto",
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<p>每个变体可以包含 <code>settings</code>、<code>headers</code> 和 <code>body</code>，其值在提供商和模型值之后应用。</p>
+
+<p>想替换一个模型的推理变体，可以在 <code>capabilities.reasoning</code> 中按 models.dev v2 的格式描述它的推理控制项，OpenCode 会据此为该模型生成变体：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>声明推理能力</span></div>
+<pre><code>{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "capabilities": {
+            "reasoning": {
+              "supported": true,
+              "effort": ["low", "medium", "high"],
+            },
+          },
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>字段</th><th>用途</th></tr>
+</thead>
+<tbody>
+<tr><td><code>supported</code></td><td>模型是否支持推理。设 <code>false</code>，或 <code>true</code> 但不带任何控制项，都不会生成变体。</td></tr>
+<tr><td><code>toggle</code></td><td>添加一个 <code>none</code> 变体，用于关闭推理。</td></tr>
+<tr><td><code>effort</code></td><td>提供哪些推理力度档位。<code>default</code> 表示保持提供商默认且不生成变体。</td></tr>
+<tr><td><code>budget</code></td><td>可选的思考 token <code>min</code> 和 <code>max</code>。设置了 <code>effort</code> 时被忽略。</td></tr>
+</tbody>
+</table>
+
+<p><code>variants</code> 里列出的变体会叠加在由 <code>capabilities.reasoning</code> 生成的变体之上。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>变体就像汽车的不同驾驶模式：同一台车（模型），「经济」（low）省 token 但想得浅，「运动」（high）想得深但更贵更慢。你在选择器里看到的 <code>claude-sonnet-5-5#high</code> 里的 <code>#high</code>，就是告诉这台车用运动模式跑这一趟。</p>
+</aside>
+
+<h2>选项（settings / headers / body）</h2>
+<p>提供商和模型条目可以用 <code>settings</code>、<code>headers</code> 和 <code>body</code> 定制请求：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "providers": {
+    "openai": {
+      "settings": {
+        "baseURL": "https://api.example.com/v1",
+      },
+      "headers": {
+        "X-Team": "platform",
+      },
+      "models": {
+        "gpt-6.1-sol": {
+          "settings": {
+            "reasoningEffort": "high",
+          },
+          "body": {
+            "store": false,
+          },
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>字段</th><th>用途</th></tr>
+</thead>
+<tbody>
+<tr><td><code>settings</code></td><td>提供商包的选项，如 <code>baseURL</code> 或 <code>reasoningEffort</code>。</td></tr>
+<tr><td><code>headers</code></td><td>附加的 HTTP 请求头。</td></tr>
+<tr><td><code>body</code></td><td>提供商专属的请求体字段。</td></tr>
+</tbody>
+</table>
+
+<p>OpenCode 先应用提供商的值，再应用模型的值，最后应用所选变体的值。</p>
+<ul>
+<li>嵌套的 <code>settings</code> 和 <code>body</code> 对象按键合并。</li>
+<li>靠后的数组和标量值替换靠前的值。</li>
+<li>请求头名称大小写不敏感地匹配。</li>
+<li>这些选项是提供商专属的，换一个提供商包可能会忽略或拒绝它们。</li>
+</ul>
+
+<h2>别名（Aliases）</h2>
+<p>用 <code>modelID</code> 可以给一个 API 模型起一个更友好的目录 ID：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding-default",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding-default": {
+          "modelID": "gpt-6.1-sol",
+          "name": "Coding default",
+          "capabilities": {
+            "tools": true,
+            "freeform": ["text", "lark"],
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<p>这里 <code>openai/coding-default</code> 是你选择时用的引用名，实际发送给提供商的是 <code>gpt-6.1-sol</code>。对于一个目录里原本不存在的模型，OpenCode 做如下假设：</p>
+<ul>
+<li>支持 JSON 工具调用；输入支持文本和图片；输出只有文本。除非 <code>capabilities.freeform</code> 列出了格式，否则不支持自由格式（freeform）的工具输入。</li>
+<li>上下文上限 200,000 token，输出上限 32,000 token。</li>
+<li>输入上限未指定。</li>
+</ul>
+
+<p>OpenCode 认识 <code>text</code>、<code>regex</code> 和 <code>lark</code> 三种格式名。models.dev 上其它格式名会被忽略，但不会因此丢弃模型或其工具。如果目录模型前面架了一个拒绝 freeform 工具的代理，就把该模型的 <code>capabilities.freeform</code> 设为 <code>[]</code>。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>上面这些是<strong>回退假设</strong>，不是探测到的真实能力。知道准确值时请显式设置 <code>capabilities</code> 和 <code>limit</code>——显式值会覆盖回退假设。给不存在的模型 ID 加 <code>disabled: true</code> 还能把它从可用目录中隐藏：</p>
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "providers": {
+    "openai": {
+      "models": {
+        "legacy-model": {
+          "disabled": true,
+        },
+      },
+    },
+  },
+}</code></pre>
+</aside>
+
+<h2>推理字段（Reasoning）</h2>
+<p>对于一个用自定义的 assistant 消息字段流式输出推理内容的 OpenAI 兼容模型，设置 <code>compatibility.reasoningField</code>：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "providers": {
+    "local": {
+      "models": {
+        "reasoner": {
+          "compatibility": {
+            "reasoningField": "reasoning_content",
+          },
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<p>OpenCode 认识 <code>reasoning</code>、<code>reasoning_content</code> 和 <code>reasoning_text</code>，也接受其它提供商专属的字符串。它会从这个字段读取流式推理内容，并在把历史 assistant 消息发回模型时还原该字段。相关的 <code>requireReasoning</code> 字段见下方「兼容性（Compatibility）」。</p>
+
+<h2>提示词缓存（Prompt caching）</h2>
+<p>OpenCode 会在已知需要的位置自动放置提示词缓存断点（breakpoint），比如 Anthropic。但当 Claude 模型通过 OpenAI 兼容代理（如 LiteLLM）提供服务时，OpenCode 无法察觉它们需要 Anthropic 风格的 <code>cache_control</code> 断点。给这些 Claude 模型设置 <code>compatibility.cacheFormat</code>：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>LiteLLM 代理示例</span></div>
+<pre><code>{
+  "providers": {
+    "litellm": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://litellm.example.com/v1" },
+      "models": {
+        "claude-sonnet-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        "claude-opus-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        // 同一代理上的其它模型自动缓存，无需设置。
+        "gpt-6.1-sol": {},
+      },
+    },
+  },
+}</code></pre>
+
+<p>设置后，OpenCode 会在最后一个工具定义、系统提示词和最新一条消息上标记 <code>cache_control: { "type": "ephemeral" }</code>，使用端点默认的五分钟缓存时长。阿里云 Model Studio 的模型用 <code>"alibaba"</code>——它们接受同样的标记，但会忽略工具定义上的标记。如果提供商下所有模型都接受同一种格式，可以直接在提供商上设 <code>compatibility.cacheFormat</code>。其它字段见下方「兼容性（Compatibility）」。</p>
+
+<h3>缓存时长</h3>
+<p>OpenCode 默认不发送缓存时长，各提供商用自己的默认值（如 Anthropic 是五分钟）。在提供商或模型上设置 <code>settings.cache.ttl</code> 可以指定不同的时长；模型设置优先于提供商设置。</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "1h" } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "ttl": "5m" } } },
+      },
+    },
+  },
+}</code></pre>
+
+<p><code>ttl</code> 的值是「数字 + 单位」，单位可以是 <code>ms</code>、<code>s</code>、<code>m</code>、<code>h</code> 或 <code>d</code>，如 <code>"5m"</code>、<code>"1h"</code> 或 <code>"24h"</code>。OpenCode 会原样发送，所以要用提供商接受的值：</p>
+
+<table>
+<thead>
+<tr><th>API</th><th>时长放在哪里</th></tr>
+</thead>
+<tbody>
+<tr><td>Anthropic Messages</td><td>每个缓存标记上的 <code>cache_control.ttl</code>。Anthropic 接受 <code>"5m"</code> 和 <code>"1h"</code>。</td></tr>
+<tr><td>Bedrock Converse</td><td>每个 <code>cachePoint</code> 上的 <code>ttl</code>。只支持五分钟缓存的老 Claude 模型会忽略 <code>"1h"</code>。</td></tr>
+<tr><td>OpenAI Chat 和 Responses</td><td><code>"24h"</code> 发送到 <code>prompt_cache_retention</code>；其它值发送到 <code>prompt_cache_options.ttl</code>。</td></tr>
+</tbody>
+</table>
+
+<p>不用标记就自动缓存的提供商（如 Gemini）会忽略它。更长的缓存时长写入成本通常更高：Anthropic 的一小时缓存写入按输入价格的 2 倍计费，五分钟则是 1.25 倍。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><a href="warming.html">会话预热</a>（Warming）可以利用这个缓存时长，在 <code>interval: "auto"</code> 模式下掐着缓存过期前的时间点发请求，把缓存命中率拉满——这是长会话省钱的关键技巧。</p>
+</aside>
+
+<h2>兼容性（Compatibility）</h2>
+<p><code>compatibility</code> 描述模型所经 API 的请求/响应怪癖，比如推理内容放在哪个字段、端点是否接受 <code>prompt_cache_key</code>。每个模型只通过一个 API 服务，某个字段只有当那个 API 会读取它时才生效，其余字段被忽略。</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "providers": {
+    "local": {
+      "compatibility": { "streamUsage": false },
+      "models": {
+        "reasoner": {
+          "compatibility": { "reasoningField": "reasoning_content", "maxTokensField": "max_tokens" },
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<p>提供商级 <code>compatibility</code> 作用于该提供商的所有模型；模型自己的 <code>compatibility</code> 逐字段覆盖它。OpenCode 先取 models.dev 为该模型 API 发布的值（<code>reasoningField</code>、<code>maxTokensField</code>、<code>mediaInput</code>），再叠加模型配置。未设置的字段保持提供商包的内置默认或自动检测。<code>supportsThinkingBlockBinding</code> 和 <code>supportsEffortUpdates</code> 只能设在模型上。</p>
+
+<table>
+<thead>
+<tr><th>字段</th><th>作用</th><th>哪些 API 读取</th><th>取值与默认</th></tr>
+</thead>
+<tbody>
+<tr><td><code>reasoningField</code></td><td>承载推理内容的 assistant 消息字段。读取流式推理时最先检查它，回发历史推理时也用它。</td><td>OpenAI Chat</td><td>任意字段名，但不能是 <code>role</code>、<code>content</code>、<code>refusal</code> 或 <code>tool_calls</code>。未设置时用流里看到的字段，否则用 <code>reasoning_content</code>。</td></tr>
+<tr><td><code>requireReasoning</code></td><td>在每条历史 assistant 消息上都发送推理字段；没有推理内容时发送空字符串。</td><td>OpenAI Chat</td><td><code>true</code> 或 <code>false</code>。设置过 <code>reasoningField</code> 或模型是 DeepSeek 时默认 <code>true</code>，否则 <code>false</code>。</td></tr>
+<tr><td><code>maxTokensField</code></td><td>承载输出 token 上限的请求体字段。</td><td>OpenAI Chat</td><td><code>max_completion_tokens</code> 或 <code>max_tokens</code>。未设置时，对需要它的提供商（如 DeepSeek、Moonshot、Together AI、Z.AI、Cerebras）自动检测出 <code>max_tokens</code>，否则用 <code>max_completion_tokens</code>。</td></tr>
+<tr><td><code>requireFinishReason</code></td><td>把缺少 <code>finish_reason</code> 就结束的流视为「响应不完整」错误；<code>false</code> 则接受它为已完成。</td><td>OpenAI Chat</td><td><code>true</code> 或 <code>false</code>。默认 <code>true</code>。</td></tr>
+<tr><td><code>requireAssistantAfterTool</code></td><td>在工具结果和下一条用户消息之间插入一条 assistant 消息，用于拒绝该顺序的端点。</td><td>OpenAI Chat</td><td><code>true</code> 或 <code>false</code>。Mistral 系模型 ID 默认 <code>true</code>，否则 <code>false</code>。</td></tr>
+<tr><td><code>supportsPromptCacheKey</code></td><td>端点是否接受 <code>prompt_cache_key</code> 请求体字段。</td><td>OpenAI Chat、OpenAI Responses、Mistral</td><td><code>true</code> 或 <code>false</code>。OpenAI Chat 只在 <code>true</code> 时发送该键（部分提供商包默认设为 true）。其它 API 默认发送，除非设为 <code>false</code>。</td></tr>
+<tr><td><code>streamUsage</code></td><td>通过 <code>stream_options.include_usage</code> 在流中请求 token 用量。</td><td>OpenAI Chat</td><td><code>true</code> 或 <code>false</code>。默认 <code>true</code>。</td></tr>
+<tr><td><code>cacheFormat</code></td><td>端点接受的提示词缓存标记语法。覆盖提供商的自动断点放置。<code>alibaba</code> 会跳过工具定义。</td><td>所有带提示词缓存标记的 API，包括 OpenAI Chat、Anthropic Messages、Bedrock Converse</td><td><code>anthropic</code> 或 <code>alibaba</code>。未设置用提供商默认。见「提示词缓存」一节。</td></tr>
+<tr><td><code>supportsThinkingBlockBinding</code></td><td>让 API 对「先前上下文已变化」的思考块予以丢弃，而不是拒绝整个请求。</td><td>Anthropic Messages、Bedrock Converse</td><td><code>true</code> 或 <code>false</code>。未设置时自动检测 Claude 5.1 及更高版本。</td></tr>
+<tr><td><code>supportsEffortUpdates</code></td><td>把推理力度的变更作为逐消息更新发送，从而保住提示词缓存；否则力度变更作用于整个请求。</td><td>Anthropic Messages、OpenAI Responses</td><td><code>true</code> 或 <code>false</code>。未设置时自动检测 Claude Opus 5、Claude 5.1 及更高版本、GPT-6 及更高版本。</td></tr>
+<tr><td><code>mediaInput</code></td><td>决策请求中图片等媒体的位置。</td><td>System One</td><td><code>assets</code>（图片从 state 引用）、<code>state</code>（内联在 state 里）或 <code>root</code>（顶层的 <code>images</code>、<code>audio</code>、<code>videos</code> 列表）。未设置用提供商默认。</td></tr>
+</tbody>
+</table>
+
+<h2>本地模型</h2>
+<p>OpenCode 会自动在默认本地地址上发现 Ollama、LM Studio 和 vLLM 的模型。也可以手动配置任意 OpenAI 兼容服务器。</p>
+
+<div class="term-head"><span>text</span><span>自动发现的引用格式</span></div>
+<pre><code>ollama/gemma3:4b
+lmstudio/google/gemma-4-26b-a4b
+vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct</code></pre>
+
+<h3>Ollama</h3>
+<p>Ollama 监听在 <code>http://127.0.0.1:11434</code> 时，用 <code>ollama</code> 提供商 ID 选择一个被发现的模型：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}</code></pre>
+
+<p>OpenCode 在后台刷新模型清单，并从 Ollama 读取上下文、视觉和工具调用能力。纯嵌入（embedding）模型会被排除。</p>
+
+<p>主机或端口不同时，设置 Ollama 的 OpenAI 兼容 URL。发现机制仍走同一前缀下的原生 Ollama API：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>自定义地址</span></div>
+<pre><code>{
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}</code></pre>
+
+<ul>
+<li>端点不需要 bearer 认证时省略 <code>apiKey</code>。</li>
+<li>用 <code>"plugins": ["-opencode.provider.ollama"]</code> 关闭自动发现。</li>
+</ul>
+
+<h3>LM Studio</h3>
+<p>LM Studio 服务器（无认证）运行在 <code>http://127.0.0.1:1234</code> 时，用 <code>lmstudio</code> 提供商 ID 选择被发现的模型：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}</code></pre>
+
+<p>OpenCode 在后台刷新清单，并从 LM Studio 读取上下文、视觉和工具调用能力。嵌入模型会被排除。</p>
+
+<p>主机或端口不同时，设置 OpenAI 兼容 URL，模型仍然自动发现：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>自定义地址</span></div>
+<pre><code>{
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}</code></pre>
+
+<ul>
+<li>LM Studio 关闭了认证时省略 <code>apiKey</code>。</li>
+<li>用 <code>"plugins": ["-opencode.provider.lmstudio"]</code> 关闭自动发现。</li>
+</ul>
+
+<h3>vLLM</h3>
+<p>vLLM 监听在 <code>http://127.0.0.1:8000</code> 时，用 <code>vllm</code> 提供商 ID 选择被发现的模型：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+}</code></pre>
+
+<p>OpenCode 会检查 <code>/health</code>，在后台刷新 <code>/v1/models</code>，把报告的 <code>max_model_len</code> 用作上下文上限，并且只纳入属于 <code>vllm</code> 的模型卡。</p>
+
+<p>被发现的模型只声明文本输入输出，不声明视觉和工具能力。vLLM 需要用 <code>--enable-auto-tool-choice</code>、<code>--tool-call-parser</code> 等服务器参数开启工具调用，而发现机制不会报告这些。</p>
+
+<p>端点不同或服务器带认证时，设置它的 OpenAI 兼容 URL：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>自定义地址</span></div>
+<pre><code>{
+  "providers": {
+    "vllm": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:9000/v1",
+        "apiKey": "{env:VLLM_API_KEY}",
+      },
+    },
+  },
+}</code></pre>
+
+<ul>
+<li>关闭认证时省略 <code>apiKey</code>。</li>
+<li>用 <code>"plugins": ["-opencode.provider.vllm"]</code> 关闭自动发现。</li>
+<li>支持带路径前缀的代理。例如 <code>https://example.com/vllm/v1</code> 会检查 <code>/vllm/health</code> 并发现 <code>/vllm/v1/models</code>。</li>
+</ul>
+
+<h3>其它兼容服务器</h3>
+<p>对于其它 OpenAI 兼容服务器，需要定义它的提供商包、端点和至少一个模型：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/coder",
+  "providers": {
+    "local": {
+      "name": "Local server",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:1234/v1",
+      },
+      "models": {
+        "coder": {
+          "modelID": "model-name-on-server",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
+}</code></pre>
+
+<p>请如实填写服务器的真实模型名、上下文上限、输入输出类型和工具支持情况——OpenCode 无法检测自定义模型的回退假设是否准确。端点需要密钥时，在 <code>settings</code> 里加 <code>apiKey</code>，并用环境变量替换如 <code>"apiKey": "{env:LOCAL_API_KEY}"</code>；不要把密钥提交进仓库。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>密钥安全：<code>{env:VAR}</code> 语法让配置引用环境变量而不把真实密钥写进文件。但配置文件本身仍会被 git 跟踪——把 <code>.env</code> 加入 <code>.gitignore</code>，密钥只放环境里，这是最常见的泄漏源头。</p>
+</aside>
+
+<h2>引用格式（References）</h2>
+<p>模型选择器使用 <code>provider/model</code> 格式，可选加 <code>#variant</code>：</p>
+
+<div class="term-head"><span>text</span><span>合法示例</span></div>
+<pre><code>openai/gpt-6.1-sol
+openai/gpt-6.1-sol#high
+openrouter/anthropic/claude-sonnet-5.5#high</code></pre>
+
+<table>
+<thead>
+<tr><th>部分</th><th>规则</th></tr>
+</thead>
+<tbody>
+<tr><td>提供商</td><td>在第一个 <code>/</code> 处结束；不能包含 <code>/</code> 或 <code>#</code>。</td></tr>
+<tr><td>模型</td><td>可以包含更多 <code>/</code> 字符；不能包含 <code>#</code>。</td></tr>
+<tr><td>变体</td><td>如有，跟在 <code>#</code> 之后。</td></tr>
+<tr><td>大小写</td><td>提供商和模型 ID 区分大小写。</td></tr>
+</tbody>
+</table>
+
+<p>请用目录 ID，而不是提供商的显示名称。根级、智能体和命令的 <code>model</code> 字段都接受上面的字符串形式，或展开的对象形式：</p>
+
+<div class="term-head"><span>jsonc</span><span>展开形式</span></div>
+<pre><code>{
+  "model": {
+    "providerID": "openrouter",
+    "model": "anthropic/claude-sonnet-5.5",
+  },
+}</code></pre>
+
+<p>展开形式适合生成式或程序化配置。</p>
+
+<h2>注意事项（Caveats）</h2>
+<p>配置模型时记住这几条规则：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "model": "openai/gpt-6.1-sol"
+}</code></pre>
+
+<ul>
+<li>选择器对象用 <code>model</code> 字段；提供商目录条目用 <code>modelID</code> 表示发送给提供商的 ID。</li>
+<li>虽然根级选择结构接受变体，但 V2 目录默认值<strong>不会保留</strong>它。请改为在会话、单次运行、智能体或命令上选择变体。</li>
+<li>模型选项是提供商专属的，另一个提供商包可能会忽略或拒绝它们。</li>
+<li>目录数据、凭据和配置都按位置（目录）作用域划分。一个项目里可用的模型在另一个项目里可能不可用。</li>
+<li>配置文件通常会自动重载。已经在进行中的模型请求会沿用它启动时的设置。</li>
+</ul>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

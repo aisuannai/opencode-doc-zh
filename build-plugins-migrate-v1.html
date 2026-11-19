@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件迁移 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-plugins-migrate-v1" data-group="构建与集成" data-src="https://opencode.ai/docs/build/plugins/migrate-v1/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>插件迁移（V1 → V2）</h1>
+<p class="lede">插件的配置可以被自动规范化，但插件的实现代码必须手动移植。V1 插件函数返回一个包含工具（tool）和钩子（hook）的对象；V2 插件默认导出一个带 <code>id</code> 和 <code>setup(ctx)</code> 的定义，<code>setup</code> 通过上下文注册钩子、转换、工具和订阅。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><strong>V1 插件实现不会在 V2 里运行。</strong>只是挪一下文件位置、或改一下配置条目的名字，是不够的。</p>
+</aside>
+
+<h2>迁移插件配置</h2>
+<p>把 <code>plugin</code> 改名为 <code>plugins</code>。把「包 + 选项」的元组改成对象：</p>
+<div class="term-head"><span>opencode.jsonc · V1 → V2</span><span>JSONC</span></div>
+<pre><code>// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}</code></pre>
+
+<p>V2 会同时从 <code>.opencode/plugin/</code> 和 <code>.opencode/plugins/</code> 发现本地插件；V2 的文件请使用 <code>.opencode/plugins/</code>。配置的本地路径必须指向<strong>目录</strong>。按上面的例子，要把移植后的实现挪到 <code>./plugin/local/index.ts</code>；配置成 <code>./plugin/local.ts</code> 的文件会被跳过并在日志里告警。挪动插件时，把辅助模块放在插件旁边。本地插件和包插件使用相同的实现 API。</p>
+
+<h2>替换入口（Entrypoint）</h2>
+<p>修改包的导入，把导出的插件函数换成 <code>Plugin.define</code>，并把初始化逻辑挪进 <code>setup</code>：</p>
+<div class="term-head"><span>V1</span><span>TypeScript</span></div>
+<pre><code>import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) =&gt; {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 的工具和钩子
+  }
+}</code></pre>
+<div class="term-head"><span>V2</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})</code></pre>
+
+<p>每个 V2 插件都需要一个稳定的 <code>id</code>。插件存储按这个 ID 划分作用域，这个 ID 也是插件在状态与诊断信息里的标识。已发布的插件应依赖与其目标 OpenCode 版本兼容的 <code>@opencode/plugin</code> 版本。</p>
+
+<h2>迁移上下文（Context）</h2>
+<p>V2 上下文既是 OpenCode 客户端，也是插件 API。大多数操作按领域（domain）分组，而不是挂在一个单独的 <code>client</code> 属性上：</p>
+
+<table>
+<thead>
+<tr><th>V1</th><th>V2</th></tr>
+</thead>
+<tbody>
+<tr><td><code>directory</code></td><td><code>ctx.location.directory</code></td></tr>
+<tr><td><code>project</code></td><td><code>ctx.location.project</code></td></tr>
+<tr><td><code>client</code></td><td>领域方法，如 <code>ctx.session</code>、<code>ctx.permission</code>、<code>ctx.agent</code></td></tr>
+<tr><td>插件选项参数</td><td><code>ctx.options</code></td></tr>
+<tr><td>返回的 <code>dispose()</code> 钩子</td><td><code>setup</code> 返回的清理函数</td></tr>
+<tr><td>返回的 <code>event</code> 钩子</td><td><code>ctx.event.subscribe()</code></td></tr>
+<tr><td>返回的 config、model 或 tool 变更</td><td>某个领域的 <code>transform(...)</code></td></tr>
+<tr><td><code>$</code> Bun shell 辅助函数</td><td>导入并管理你的插件所用进程 API</td></tr>
+</tbody>
+</table>
+
+<p><code>ctx.location</code> 描述的是当前插件实例被加载的位置，不是插件可能观察到的每个会话或事件的位置。这个区别重要时，去读会话或事件数据。</p>
+
+<p>上下文暴露的领域远多于上表所列，包括目录（catalogs）、命令、集成、MCP 服务器、引用、技能、存储、VCS、工作树和网页搜索。见<a href="build-plugins-server.html#sec-5">完整的插件上下文</a>。</p>
+
+<h2>在 setup 里注册钩子</h2>
+<p>V1 按字符串键返回钩子。V2 在拥有该操作的领域上注册每个钩子。回调收到一个可变的事件对象，而不是分开的 <code>input</code> 和 <code>output</code> 对象：</p>
+<div class="term-head"><span>V1</span><span>TypeScript</span></div>
+<pre><code>import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () =&gt; ({
+  "tool.execute.before": async (input, output) =&gt; {
+    if (input.tool === "read" &amp;&amp; output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) =&gt; {
+    output.env.COMPANY_ENV = "development"
+  },
+})</code></pre>
+<div class="term-head"><span>V2</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) =&gt; {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" &amp;&amp; input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) =&gt; {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})</code></pre>
+
+<p>注册在插件生命周期内保持有效，插件卸载时被销毁。只有当插件需要提前移除某个特定钩子或转换时，才保留返回的注册并用 <code>registration.dispose()</code>。</p>
+
+<p>用这张表为每个 V1 钩子找最接近的 V2 API：</p>
+
+<table>
+<thead>
+<tr><th>V1 钩子</th><th>V2 API</th></tr>
+</thead>
+<tbody>
+<tr><td><code>event</code></td><td><code>ctx.event.subscribe()</code></td></tr>
+<tr><td><code>dispose</code></td><td><code>setup</code> 返回的清理函数</td></tr>
+<tr><td><code>config</code></td><td>受影响领域上的转换</td></tr>
+<tr><td><code>tool</code> 映射</td><td><code>ctx.tool.transform(...)</code></td></tr>
+<tr><td><code>auth</code></td><td><code>ctx.integration.transform(...)</code> 和集成 API</td></tr>
+<tr><td><code>provider</code></td><td><code>ctx.provider.transform(...)</code> 和 <code>ctx.model.transform(...)</code></td></tr>
+<tr><td><code>chat.message</code></td><td><code>ctx.session.hook("prompt", ...)</code></td></tr>
+<tr><td><code>chat.params</code></td><td><code>ctx.session.hook("context", ...)</code></td></tr>
+<tr><td><code>chat.headers</code></td><td><code>ctx.session.hook("model.request", ...)</code> 或 <code>"http.request"</code></td></tr>
+<tr><td><code>permission.ask</code></td><td><code>ctx.permission.hook("evaluate", ...)</code></td></tr>
+<tr><td><code>command.execute.before</code></td><td>命令转换或 prompt 钩子，视意图而定</td></tr>
+<tr><td><code>tool.execute.before</code></td><td><code>ctx.tool.hook("execute.before", ...)</code></td></tr>
+<tr><td><code>tool.execute.after</code></td><td><code>ctx.tool.hook("execute.after", ...)</code></td></tr>
+<tr><td><code>shell.env</code></td><td><code>ctx.shell.hook("create.before", ...)</code></td></tr>
+<tr><td><code>tool.definition</code></td><td><code>ctx.tool.transform(...)</code></td></tr>
+<tr><td><code>experimental.chat.system.transform</code></td><td><code>ctx.session.hook("context", ...)</code> 并编辑 <code>event.system</code></td></tr>
+<tr><td><code>experimental.chat.messages.transform</code></td><td><code>ctx.session.hook("context", ...)</code> 并编辑 <code>event.messages</code></td></tr>
+<tr><td><code>experimental.session.compacting</code></td><td><code>ctx.session.hook("compaction", ...)</code></td></tr>
+</tbody>
+</table>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>这张表是「目的地地图」而非「改名清单」。最大的语义变化在<strong>时机</strong>上：V2 的 <code>prompt</code> 钩子跑在提示词持久化收件之前，而 <code>context</code> 跑在智能体模型请求前一刻。如果一个转换要应用到每一种模型请求，就把 <code>context</code>、<code>compaction</code>、<code>generate</code>、<code>title</code> 分别注册一遍——V1 里一个钩子包打天下，V2 里各管一段。</p>
+</aside>
+
+<p>并非每个实验性 V1 钩子都有直接的 V2 对应物。使用 <code>experimental.compaction.autocontinue</code>、<code>experimental.provider.small_model</code> 或 <code>experimental.text.complete</code> 的插件，请基于 V2 的 session、provider、model 和 event API 重新评估，而不是保留一个内部生命周期假设。</p>
+
+<p><code>command.execute.before</code> 也没有一对一的全局钩子。当插件拥有那个命令时，用 <code>ctx.command.transform</code> 注册命令。当真实意图是修改命令和其它提示来源提交的提示词时，用 prompt 钩子。</p>
+
+<h2>迁移请求钩子</h2>
+<p>V2 把提示收件、模型可见上下文、语义模型选项和原生 HTTP 分开了。选你的插件需要的<strong>最窄一层</strong>：</p>
+<div class="term-head"><span>V1</span><span>TypeScript</span></div>
+<pre><code>import type { Plugin } from "@opencode-ai/plugin"
+
+export const RequestPlugin: Plugin = async () =&gt; ({
+  "chat.params": async (_input, output) =&gt; {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) =&gt; {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) =&gt; {
+    output.system.push("Focus on correctness.")
+  },
+})</code></pre>
+<div class="term-head"><span>V2</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) =&gt; {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) =&gt; {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})</code></pre>
+
+<ul>
+<li>在 <code>event.options</code> 里使用语义化的提供商选项。</li>
+<li>模型请求头和原始请求设置用 <code>model.request</code>；只有插件需要原生提供商 HTTP 交换时才用 <code>http.request</code> 或 <code>http.response</code>。</li>
+<li>特定提供商的钩子可以把 <code>{ providerID: "..." }</code> 作为 <code>ctx.session.hook</code> 的第三个参数传入。</li>
+</ul>
+
+<h2>迁移自定义工具</h2>
+<p>V1 返回一个用旧 <code>tool()</code> 辅助函数构建的 <code>tool</code> 映射。V2 通过同步的 <code>ctx.tool.transform</code> 编辑器注册工具定义。工具 schema 使用 JSON Schema，执行返回结构化内容：</p>
+<div class="term-head"><span>V1</span><span>TypeScript</span></div>
+<pre><code>import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () =&gt; ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})</code></pre>
+<div class="term-head"><span>V2</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) =&gt; {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})</code></pre>
+
+<p>转换是可重放的状态编辑。保持回调同步、廉价、并且没有一次性副作用。注册之前加载外部数据，在回调里捕获它，数据变化时调用该领域的 <code>reload()</code>。后一个插件的转换能看到前面的修改，并可以更新、替换或移除它们。</p>
+
+<p>同样的转换模式替代 V1 的 <code>config</code> 和 <code>provider</code> 钩子，但 V2 不再暴露一个可变的全局配置对象。把变更注册到拥有它的领域：<code>ctx.agent</code>、<code>ctx.provider</code>、<code>ctx.model</code>、<code>ctx.command</code>、<code>ctx.integration</code>、<code>ctx.mcp</code>、<code>ctx.reference</code>、<code>ctx.skill</code>、<code>ctx.tool</code>、<code>ctx.vcs</code>、<code>ctx.websearch</code> 或 <code>ctx.worktree</code>。认证方式属于集成；提供商转换贡献源定义和提供商设置，模型转换对完整的激活提供商模型集合施加限制和覆盖：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>await ctx.provider.transform((editor) =&gt; {
+  editor.update("anthropic", (provider) =&gt; {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) =&gt; {
+  editor.list("anthropic").forEach((model) =&gt; {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})</code></pre>
+
+<h2>迁移事件与清理</h2>
+<p>V1 的 <code>event</code> 回调变成对公共服务器事件流的异步订阅。在 <code>setup</code> 返回的清理函数里中止它：</p>
+<div class="term-head"><span>V2</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () =&gt; {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () =&gt; controller.abort()
+  },
+})</code></pre>
+
+<p>用清理函数管理定时器、子进程、socket 等插件拥有的资源。钩子和转换注册以插件为作用域，会被自动清理。</p>
+
+<h2>迁移选项与持久化状态</h2>
+<p>从 <code>ctx.options</code> 读选项。状态属于插件时，用 <code>ctx.storage</code> 而不是自己发明一个全局文件；它的 JSON 值是持久化的，且以插件为作用域：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")</code></pre>
+
+<h2>同一个包同时支持 V1 和 V2</h2>
+<p>一个包可以临时从同一个默认导出暴露两套实现。V1 调用 <code>server()</code>，V2 调用 <code>setup()</code>。两套 API 仍然分开；这种形态不会自动翻译钩子：</p>
+<div class="term-head"><span>src/index.ts</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () =&gt; {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () =&gt; {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}</code></pre>
+
+<p>V1 对象入口从 OpenCode <code>1.18.29</code> 起受支持。如果你要支持更老的 V1 版本，请使用单独的包版本或入口，并测试你声称支持的最老版本。支持窗口结束后移除 V1 实现。</p>
+
+<h2>验证移植后的插件</h2>
+<p>对每个插件：</p>
+<ol>
+<li>确认它的 ID 和来源出现在活跃插件列表里。</li>
+<li>触发每一个已注册的钩子、转换、工具、命令和事件订阅。</li>
+<li>通过重载或移除插件验证清理。</li>
+<li>用一个干净的项目测试插件选项和持久化状态。</li>
+<li>对已发布的包，测试真正安装的包，而不是只测工作区软链副本。</li>
+</ol>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>完整的 Promise API 见<a href="build-plugins-server.html">服务器插件</a>，Effect 入口见 <a href="build-plugins-effect.html">Effect 插件</a>，自定义方法与事件见 <a href="build-plugins-rpc.html">插件 RPC</a>，终端界面见 <a href="build-plugins-cli.html">TUI 插件</a>。迁移期间如果只需要让老用户不掉线，可以先按「同一包双实现」发过渡版，再在支持窗口结束后切纯 V2。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

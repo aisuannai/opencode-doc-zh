@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自定义命令 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="commands" data-group="配置" data-src="https://opencode.ai/docs/commands/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>自定义命令</h1>
+<p class="lede">把常用的 prompt 模板变成一个斜杠命令：写一个 Markdown 文件，就有 <code>/review</code> 可用了。支持参数占位、嵌 shell 命令、指定智能体和模型、后台运行。</p>
+
+<p>创建 <code>.opencode/commands/review.md</code>，就能把一段 prompt 变成 <code>/review</code>：</p>
+
+<div class="term-head"><span>.opencode/commands/review.md</span><span>Markdown</span></div>
+<pre><code>Review $ARGUMENTS for bugs and missing tests.</code></pre>
+
+<p>在 TUI 里带着目标运行它：</p>
+
+<div class="term-head"><span>TUI 命令</span><span></span></div>
+<pre><code>/review src/auth.ts</code></pre>
+
+<p>OpenCode 会把 <code>Review src/auth.ts for bugs and missing tests.</code> 作为用户 prompt 提交。</p>
+
+<h2>Markdown 命令</h2>
+<p>全局命令放在 <code>~/.config/opencode/commands/</code>，项目命令放在 <code>.opencode/commands/</code>：</p>
+
+<div class="term-head"><span>text</span><span>两种位置</span></div>
+<pre><code>~/.config/opencode/commands/review.md
+.opencode/commands/review.md</code></pre>
+
+<p>只发现 <code>.md</code> 文件。嵌套路径会成为带 <code>/</code> 分隔符的命令名：</p>
+
+<div class="term-head"><span>.opencode/commands/team/review.md</span><span>Markdown</span></div>
+<pre><code>Review $ARGUMENTS using the team's checklist.</code></pre>
+
+<p>用 <code>/team/review src/auth.ts</code> 运行嵌套命令。旧版单数目录 <code>command/</code> 也会被发现，但新文件请用 <code>commands/</code>。</p>
+
+<p>命令需要元数据时加上 YAML frontmatter。裁剪后的 Markdown 正文<strong>始终</strong>是 prompt 模板：</p>
+
+<div class="term-head"><span>.opencode/commands/review.md</span><span>Markdown</span></div>
+<pre><code>---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.</code></pre>
+
+<h2>JSON 命令</h2>
+<p>在任意 OpenCode JSON 或 JSONC <a href="config.html">配置文件</a>的 <code>commands</code> 键下定义命令。每个命令必须有 <code>template</code>：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}</code></pre>
+
+<h2>字段（Fields）</h2>
+<p>Markdown frontmatter 和 JSON 条目接受相同的字段，区别是 Markdown 的 <code>template</code> 来自文件正文。</p>
+
+<table>
+<thead>
+<tr><th>字段</th><th>必填</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>template</code></td><td>仅 JSON 必填</td><td>prompt 模板。</td></tr>
+<tr><td><code>description</code></td><td>否</td><td>在命令列表和发现机制中显示的文字。</td></tr>
+<tr><td><code>agent</code></td><td>否</td><td>命令运行时选用的智能体。</td></tr>
+<tr><td><code>model</code></td><td>否</td><td>模型覆盖，格式为 <code>provider/model</code> 或 <code>provider/model#variant</code>。</td></tr>
+<tr><td><code>subagent</code></td><td>否</td><td><code>true</code> 在后台子会话中运行；<code>false</code> 强制在当前会话运行。</td></tr>
+<tr><td><code>subtask</code></td><td>否</td><td><code>subagent</code> 的弃用别名。</td></tr>
+</tbody>
+</table>
+
+<p>例如，这个 JSON 命令设置了当前所有可选字段：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>不要把 <code>template</code> 写进 Markdown frontmatter——正文本身就是模板。frontmatter 里再写 <code>template</code> 是无效的。</p>
+</aside>
+
+<h2>参数（Arguments）</h2>
+<p>用 <code>$ARGUMENTS</code> 表示用户输入的完整参数字符串，原样保留：</p>
+
+<div class="term-head"><span>.opencode/commands/component.md</span><span>Markdown</span></div>
+<pre><code>Create a typed React component named $ARGUMENTS.</code></pre>
+
+<p>运行 <code>/component Account Settings</code> 时，占位符变成 <code>Account Settings</code>。</p>
+
+<h2>位置参数（Positions）</h2>
+<p>用 <code>$1</code>、<code>$2</code> 等编号表示解析出的位置参数。单引号或双引号可以给多个词分组，引号本身会被去掉：</p>
+
+<div class="term-head"><span>.opencode/commands/check.md</span><span>Markdown</span></div>
+<pre><code>Check $1. Focus on $2.</code></pre>
+
+<p>运行 <code>/check src/auth.ts "error handling"</code> 时，<code>$1</code> 是 <code>src/auth.ts</code>，<code>$2</code> 是 <code>error handling</code>。</p>
+
+<p>编号最大的占位符会吃掉它对应的参数<strong>以及之后的所有内容</strong>。缺失的位置会变成空字符串：</p>
+
+<div class="term-head"><span>.opencode/commands/compare.md</span><span>Markdown</span></div>
+<pre><code>Compare $1 with $2.</code></pre>
+
+<p>运行 <code>/compare api stable branch</code> 时，OpenCode 提交 <code>Compare api with stable branch.</code></p>
+
+<h2>回退（Fallback）</h2>
+<p>模板里没有 <code>$ARGUMENTS</code> 也没有位置占位符时，OpenCode 会把非空参数附加在模板之后的空行上：</p>
+
+<div class="term-head"><span>.opencode/commands/explain.md</span><span>Markdown</span></div>
+<pre><code>Explain this code clearly.</code></pre>
+
+<p>运行 <code>/explain src/cache.ts</code> 时，prompt 变成：</p>
+
+<div class="term-head"><span>text</span><span>展开结果</span></div>
+<pre><code>Explain this code clearly.
+
+src/cache.ts</code></pre>
+
+<h2>内嵌 Shell</h2>
+<p>用 <code>!</code> 加反引号包裹一条 shell 命令，它的输出会在 prompt 提交前被插入：</p>
+
+<div class="term-head"><span>.opencode/commands/review-diff.md</span><span>Markdown</span></div>
+<pre><code>Review this diff:
+
+!`git diff --stat &amp;&amp; git diff`</code></pre>
+
+<p>OpenCode 在当前项目位置用配置好的 shell 逐个运行这些代码块，并把合并后的输出插进去。参数占位符会先被展开：</p>
+
+<div class="term-head"><span>.opencode/commands/history.md</span><span>Markdown</span></div>
+<pre><code>Summarize these commits:
+
+!`git log --oneline -$1`</code></pre>
+
+<p>运行 <code>/history 5</code> 时，shell 收到的是 <code>git log --oneline -5</code>。<strong>不要</strong>把不可信的参数放进 shell 代码块。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>Shell 代码块在 OpenCode 展开命令时就会运行，<strong>不经过</strong>智能体的工具权限流程。只使用来自可信来源的命令。</p>
+</aside>
+
+<h2>附件（Attachments）</h2>
+<p>存储的模板不会展开 <code>@path</code>，它保持为普通 prompt 文本：</p>
+
+<div class="term-head"><span>.opencode/commands/readme.md</span><span>Markdown</span></div>
+<pre><code>Review @README.md.</code></pre>
+
+<p>想附加文件，请在调用命令时通过输入框（composer）添加。OpenCode 提交展开后的 prompt 时会保留这些输入框附件。</p>
+
+<h2>执行（Execution）</h2>
+<p>命令在提交一条持久的用户 prompt 之前，会先展开参数和 shell 代码块。默认在当前会话中运行：</p>
+
+<div class="term-head"><span>.opencode/commands/plan.md</span><span>Markdown</span></div>
+<pre><code>---
+agent: plan
+---
+
+Plan $ARGUMENTS.</code></pre>
+
+<p>运行 <code>/plan migration</code> 会先把当前会话切换到 <code>plan</code> 智能体，再提交 prompt。</p>
+
+<p>模型选择遵循以下规则：</p>
+<ol>
+<li>命令的 <code>model</code> 覆盖所有其它模型设置。</li>
+<li>否则，所选命令智能体配置的模型覆盖调用时激活的模型。</li>
+<li>否则，保持当前会话的模型。</li>
+</ol>
+
+<p>例如，这个命令同时指定了智能体和显式模型：</p>
+
+<div class="term-head"><span>.opencode/commands/design.md</span><span>Markdown</span></div>
+<pre><code>---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.</code></pre>
+
+<h2>后台运行（Background）</h2>
+<p>设置 <code>subagent: true</code> 可以让命令在后台子会话中运行：</p>
+
+<div class="term-head"><span>.opencode/commands/audit.md</span><span>Markdown</span></div>
+<pre><code>---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.</code></pre>
+
+<p>父会话保持可用，并保留自己的智能体和模型。子会话结束时，OpenCode 会把子会话的结果或失败信息发回给父会话。</p>
+
+<table>
+<thead>
+<tr><th>取值</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>true</code></td><td>总是用子会话，即使所选智能体是 <code>mode: primary</code>。</td></tr>
+<tr><td><code>false</code></td><td>总是用当前会话，即使所选智能体是 <code>mode: subagent</code>。</td></tr>
+<tr><td>省略</td><td>只有所选智能体是 <code>mode: subagent</code> 时才用子会话。</td></tr>
+</tbody>
+</table>
+
+<p>子会话的模型依次取：命令的模型 → 所选智能体的模型 → 父会话的模型。旧的 <code>subtask</code> 仍被接受；两个字段同时存在时 <code>subagent</code> 优先：</p>
+
+<div class="term-head"><span>yaml</span><span></span></div>
+<pre><code>subagent: false
+subtask: true</code></pre>
+
+<p>因为 <code>subagent</code> 优先，这个例子会在当前会话中运行。</p>
+
+<h2>加载与覆盖（Loading）</h2>
+<p>Markdown 和 JSON 命令共用一个注册表。靠后的来源会替换同名的更早命令：</p>
+
+<div class="term-head"><span>text</span><span>优先级示例</span></div>
+<pre><code>~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command</code></pre>
+
+<p>项目来源优先于全局来源，离当前目录更近的项目来源优先于祖先目录来源。自定义定义还可以替换先前的内置命令。OpenCode 会自动重新加载命令文件和配置的变更：</p>
+
+<div class="term-head"><span>.opencode/commands/review.md</span><span>Markdown</span></div>
+<pre><code>Review only the staged changes: !`git diff --cached`</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>保存这个文件后，<code>/review</code> 立刻更新，<strong>无需重启 OpenCode</strong>。配合 shell 内嵌块，你可以把「只审查暂存区改动」这类日常流程固化成一键命令，团队还可以把 <code>.opencode/commands/</code> 提交进仓库，让所有成员共享同一套命令。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

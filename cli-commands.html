@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TUI 命令 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-commands" data-group="CLI" data-src="https://opencode.ai/docs/cli/commands/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>TUI 命令</h1>
+<p class="lede">这是 <code>opencode</code> 命令行工具的全命令参考：run、mini、session、auth、mcp、serve、service 等每个子命令的用途和常用参数，都在这里。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把 <code>opencode</code> 想成一个瑞士军刀：TUI 是最常用的那把主刀，其余命令是工具包里的备用刀片——<code>run</code> 用来无界面干活，<code>session</code> 管会话存档，<code>auth</code> 管钥匙，<code>service</code> 管后台引擎。每个命令都支持 <code>--help</code>，忘了参数随时问它。</p>
+</aside>
+
+<p>每个命令都接受 <code>--help</code> 查看完整参数列表，例如 <code>opencode run --help</code>。部分依托服务器的命令支持 <code>--standalone</code>（用私有服务器运行）或 <code>--server &lt;url&gt;</code>（指定服务器）；具体支持哪些参数以各命令的帮助输出为准。</p>
+
+<h2>run</h2>
+<p>发送一条消息并打印回复，不打开交互界面。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run "Explain this repository"</code></pre>
+
+<h3>CI 中使用</h3>
+<p>在 CI 里，把提供商 API key 作为 secret 传入，并用 standalone 模式让私有服务器收到它。例如下面这个 GitHub Actions 任务会对检出的仓库做代码审查：</p>
+<div class="term-head"><span>yaml</span><span>.github/workflows</span></div>
+<pre><code>name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-5-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
+<p>指定模型：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"</code></pre>
+<p>继续最近一次会话：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --continue "Now handle the expired case"</code></pre>
+<p>为脚本输出按行分隔的 JSON（NDJSON）：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --format json "List the TODO comments"</code></pre>
+<p>给消息附加文件：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"</code></pre>
+<p>用指定 agent 运行：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --agent build "Fix the failing test"</code></pre>
+<p>继续指定的会话：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --session ses_4f2a1c "Check edge cases"</code></pre>
+<p>自动批准未被显式拒绝的权限：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --auto "Fix the failing test"</code></pre>
+<p>创建时就归档会话，让脚本和 CI 的运行不挤进会话列表和收件箱。会话依然存在：<code>opencode session list</code> 里能看到，也可以按 ID 打开：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --archived "Review this diff"</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode run --help</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>--auto</code> 会自动批准所有未被权限规则显式拒绝的操作，包括执行命令和改文件。在 CI 里用没问题（环境本来就是一次性的），但在本地开发机上慎用——建议配合 <a href="permissions.html">opencode.json 的权限规则</a>先把「红线」划清楚，再用 <code>--auto</code>。</p>
+</aside>
+
+<h2>mini</h2>
+<p>启动极简交互界面，代替全屏 TUI。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mini</code></pre>
+<p>继续最近一次会话：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mini --continue</code></pre>
+<p>用指定模型和初始 prompt 启动：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mini --model anthropic/claude-sonnet-5-5 --prompt "Summarize this repository"</code></pre>
+<p>继续指定的会话：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mini --session ses_4f2a1c</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mini --help</code></pre>
+
+<h2>session</h2>
+<p>管理会话。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session list</code></pre>
+<p>限制条数并输出 JSON：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session list --max-count 20 --format json</code></pre>
+<p>删除一个会话及其子会话：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session delete ses_9c1b08</code></pre>
+<p>把会话数据导出为 JSON：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session export ses_4f2a1c</code></pre>
+<p>导出时对敏感的对话记录和文件数据做脱敏：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session export ses_4f2a1c --sanitize</code></pre>
+<p>从 JSON 文件或 URL 导入会话数据：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session import session.json</code></pre>
+<p>导入到指定目录：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session import session.json --directory ~/code/project</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode session --help</code></pre>
+
+<h2>auth</h2>
+<p>管理 AI 提供商和凭据。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth list</code></pre>
+<p>以 JSON 形式列出：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth list --format json</code></pre>
+<p>登录一个提供商：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth login anthropic</code></pre>
+<p>用指定的认证方式登录：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth login anthropic --method key</code></pre>
+<p>登出一个已保存的账号：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth logout anthropic work</code></pre>
+<p>切换某个集成的激活账号：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth switch anthropic work</code></pre>
+<p>导出已保存的凭据，在另一台机器上导入。<strong>注意导出文件包含明文密钥：</strong></p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth export anthropic &gt; credentials.json
+$ opencode auth import credentials.json</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode auth --help</code></pre>
+
+<h2>models</h2>
+<p>列出所有可用模型。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode models</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode models --help</code></pre>
+
+<h2>mcp</h2>
+<p>管理 MCP（Model Context Protocol）服务器。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp list</code></pre>
+<p>添加一个远程服务器：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp add context7 --url https://mcp.context7.com/mcp</code></pre>
+<p>把本地服务器添加到全局配置：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything</code></pre>
+<p>添加本地服务器并带一个环境变量：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything</code></pre>
+<p>添加远程服务器并带一个请求头：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret</code></pre>
+<p>对支持 OAuth 的远程服务器进行认证：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp auth sentry</code></pre>
+<p>移除某服务器已存储的 OAuth 凭据：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp logout sentry</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode mcp --help</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>注意 <code>mcp add</code> 里那个孤立的 <code>--</code>：它之后的整段内容（如 <code>npx -y ...</code>）整体作为启动 MCP 服务器的命令，防止 opencode 把 npx 自己的参数误认为 add 的参数。这是命令行工具传递「原生命令」的通用惯例。MCP 的更多玩法见 <a href="mcp-servers.html">MCP 服务器</a>一章。</p>
+</aside>
+
+<h2>plugin</h2>
+<p>管理插件。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode plugin list</code></pre>
+<p>把内置的服务器插件也列进来：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode plugin list --builtin</code></pre>
+<p>安装一个插件并加入全局配置：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode plugin add @example/opencode-tui</code></pre>
+<p>检查包型插件是否有更新：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode plugin check</code></pre>
+<p>更新包型插件：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode plugin update</code></pre>
+<p>从全局配置移除一个插件：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode plugin remove @example/opencode-tui</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode plugin --help</code></pre>
+
+<h2>stats</h2>
+<p>显示可分享的使用统计。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode stats</code></pre>
+<p>只看最近 7 天：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode stats --days 7</code></pre>
+<p>看模型用量：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode stats --models</code></pre>
+<p>看费用和 token 明细：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode stats --cost</code></pre>
+<p>打印 JSON 而不是报告：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode stats --json</code></pre>
+<p>只统计当前项目：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode stats --project .</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode stats --help</code></pre>
+
+<h2>serve</h2>
+<p>启动 API 和 Web 服务器。详见<a href="cli-web.html">Web 界面</a>一页。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode serve</code></pre>
+<p>绑定所有网卡并使用固定端口：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode serve --hostname 0.0.0.0 --port 4096</code></pre>
+<p>允许来自其它域名的浏览器客户端：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode serve --cors https://app.example.com</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode serve --help</code></pre>
+
+<h2>pair</h2>
+<p>打印一次性连接链接（附第一个链接的二维码），用于把浏览器或 App 登录进服务器。链接 5 分钟后过期，且只能使用一次。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair</code></pre>
+<p>在链接中使用外部 URL：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair --url https://dev.example.com</code></pre>
+<p>通过 OpenTunnel 远程地址从任何地方配对。这会把服务器暴露到互联网，所以第一次开启远程访问时它会说明这一点并请你确认。详见<a href="cli-web.html">Web 界面</a>的远程访问部分：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair --remote</code></pre>
+<p>跳过确认直接接受，例如在没有终端的脚本中：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair --remote --yes</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair --help</code></pre>
+
+<h2>service</h2>
+<p>管理后台服务器。详见<a href="cli-web.html">Web 界面</a>一页。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service start</code></pre>
+<p>重启：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service restart</code></pre>
+<p>查看状态：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service status</code></pre>
+<p>停止：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service stop</code></pre>
+<p>读取一项设置：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service get hostname</code></pre>
+<p>设置一项：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service set hostname 0.0.0.0</code></pre>
+<p>增加一个允许的 CORS 域名：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service set cors https://app.example.com</code></pre>
+<p>给服务器进程传递一个环境变量：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service set env OPENCODE_LOG_LEVEL DEBUG</code></pre>
+<p>把某项设置恢复为默认值：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service unset hostname</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service --help</code></pre>
+
+<h2>reload</h2>
+<p>不重启服务器热重载配置。正在运行的会话会在下一个步骤边界继续使用刷新后的服务：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode reload</code></pre>
+
+<h2>api</h2>
+<p>向正在运行的服务器发起请求。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode api GET /api/session</code></pre>
+<p>用查询参数调用一个操作 ID：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode api session.list --param limit=10</code></pre>
+<p>发送 JSON 请求体：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode api session.create --data '{"title": "New session"}'</code></pre>
+<p>添加请求头：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode api GET /api/session -H "accept: application/json"</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode api --help</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><code>opencode api</code> 既支持裸 HTTP 路径（<code>GET /api/session</code>），也支持操作 ID（如 <code>session.list</code>）——后者来自官方 OpenAPI 规范，写法更稳定且自带参数补全的可能。想看完整端点清单，见 <a href="api.html">HTTP API</a> 参考。</p>
+</aside>
+
+<h2>acp</h2>
+<p>通过 stdin 和 stdout 启动一个 Agent Client Protocol 服务器，供编辑器集成使用。它会一直运行，直到客户端关闭连接：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode acp</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode acp --help</code></pre>
+<p>ACP 的详细介绍见<a href="cli-acp.html">ACP</a>一页。</p>
+
+<h2>debug</h2>
+<p>提供调试和故障排查工具。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode debug agents</code></pre>
+<p>列出配置来源：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode debug config</code></pre>
+<p>给运行中的后台服务器写一份堆快照并打印路径：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode debug heap-dump</code></pre>
+<p>把快照写进指定目录：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode debug heap-dump --directory ./snapshots</code></pre>
+<p>显示全局路径：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode debug paths</code></pre>
+<p>打印单个路径：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode debug paths db</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode debug --help</code></pre>
+
+<h2>upgrade</h2>
+<p>升级 OpenCode 到最新版或指定版本。别名：<code>update</code>。</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode upgrade</code></pre>
+<p>升级到指定版本并使用指定的包管理器：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode upgrade 2.0.21 --method bun</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode upgrade --help</code></pre>
+
+<h2>uninstall</h2>
+<p>停止后台服务、移除全局缓存并卸载 OpenCode。<strong>会话数据、配置和状态不会被删除</strong>：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode uninstall</code></pre>
+<p>预览将被删除的内容：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode uninstall --dry-run</code></pre>
+<p>查看所有子命令和参数：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode uninstall --help</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>日常最值得记住的三个组合：<code>opencode</code>（进 TUI 干活）、<code>opencode run "..."</code>（无界面拿结果）、<code>opencode session list</code>（找回历史会话）。剩下的命令用到时 <code>--help</code> 一下即可，不必背。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

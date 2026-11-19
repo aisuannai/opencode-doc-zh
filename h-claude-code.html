@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness · Claude Code · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="h-claude-code" data-group="Console" data-src="https://opencode.ai/docs/console/harnesses/claude-code/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Harness · Claude Code</h1>
+<p class="lede">Claude Code 讲的是 Anthropic Messages API。用两个环境变量把它指向 Console，就能使用任何付费模型或 Go 模型——包括 GPT、Gemini 和开源模型。对于不接受 Anthropic Messages 的模型，Console 会自动做协议翻译。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><a href="console-harnesses.html#console-cli">Console CLI</a> 可以一条命令完成 Claude Code 的接入，并附带工作区的策略（policies）、MCP 服务器、Skills 和指令文件：<code>npx @opencode/console setup claude-code</code>。本文其余部分讲的是<strong>手动配置</strong>的步骤。</p>
+</aside>
+
+<div class="term-head"><span>bash</span><span>最短路径：两个环境变量</span></div>
+<pre><code>export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
+export ANTHROPIC_AUTH_TOKEN="oc_sk_..."
+claude --model claude-sonnet-5-5</code></pre>
+
+<p>把 <code>oc_sk_...</code> 替换为<a href="console-harnesses.html#get-an-api-key">个人 API key</a>。</p>
+
+<h2>配置（Configure）</h2>
+<p>把变量写进 <code>~/.claude/settings.json</code>，这样每个会话都会使用 Console。同时把 <code>opus</code>、<code>sonnet</code>、<code>haiku</code> 三个别名映射到 Console 模型上，让 <code>/model</code> 和后台任务用到的模型也随之生效：</p>
+
+<div class="term-head"><span>~/.claude/settings.json</span><span>按量付费</span></div>
+<pre><code>{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}</code></pre>
+
+<p>Claude Code 会自动在 base URL 后面拼接 <code>/v1/messages</code>，所以 base URL 里<strong>不要</strong>带上这段路径。运行 <code>/status</code> 可以确认 base URL 和 token 是否已生效。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>务必使用 <code>ANTHROPIC_AUTH_TOKEN</code>，<strong>不是</strong> <code>ANTHROPIC_API_KEY</code>。另外，如果你登录过 Claude 账号，先运行 <code>/logout</code> 再切换，否则 Claude Code 可能把你的 Claude 官方登录凭证一并发给 Console。两个变量选错、或残留官方登录态，是「明明配好了却连不上」的两大主因。</p>
+</aside>
+
+<h2>Go 订阅</h2>
+<p>使用 Go 的 base URL，以及来自<strong>订阅了 <a href="console-go.html">Go</a> 的工作区</strong>的 key：</p>
+
+<div class="term-head"><span>~/.claude/settings.json</span><span>Go 订阅</span></div>
+<pre><code>{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/go/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}</code></pre>
+
+<h2>模型（Models）</h2>
+<p><a href="console-models.html#endpoints">Console</a> 或 <a href="console-go.html#endpoints">Go</a> 端点表里的任何模型 ID 都可以用。会话中用 <code>/model</code> 切换，或为单次运行指定一个模型：</p>
+
+<div class="term-head"><span>bash</span><span>单次运行换模型</span></div>
+<pre><code>claude --model gpt-6.1-sol</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>这个配置最妙的地方是「_alias 别名映射」：<code>opus</code> / <code>sonnet</code> / <code>haiku</code> 是 Claude Code 内部按任务轻重挑模型的三个档位（重活、日常、轻活）。把它们分别指向你想要的 Console 模型后，Claude Code 的自动分工逻辑照常运转，只是「演职员表」换成了你工作区里的模型——连后台任务用哪个模型都是你说了算。</p>
+</aside>
+
+<h2>Console MCP</h2>
+<p>为<strong>所有项目</strong>添加 <a href="console-harnesses.html#console-mcp">Console MCP</a> 服务器：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp</code></pre>
+
+<p>然后在 Claude Code 里运行 <code>/mcp</code>，选中 <code>opencode-console</code>，在浏览器中完成登录。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

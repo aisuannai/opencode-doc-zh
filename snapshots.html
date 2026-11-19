@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快照 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="snapshots" data-group="配置" data-src="https://opencode.ai/docs/snapshots/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>快照</h1>
+<p class="lede">快照（Snapshots）让你把最近的对话和文件改动一起撤销，用来对刚刚完成的工作「反悔重做」。但它只是便利工具，不是备份——重要的工作请照常提交 Git 或做备份。</p>
+
+<h2>工作流（Workflow）</h2>
+<p>对某个回复不满意时，运行 <code>/undo</code>。OpenCode 会暂存（stage）一次回滚、恢复受影响的文件，并把被移除的那条 prompt 放回输入框，让你修改：</p>
+
+<div class="term-head"><span>TUI 命令</span><span></span></div>
+<pre><code>/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.</code></pre>
+
+<p>提交修改后的 prompt 时，暂存的回滚会一并生效。提交之前，随时可以运行 <code>/redo</code> 取消回滚，恢复到 <code>/undo</code> 之前的对话和文件状态：</p>
+
+<div class="term-head"><span>TUI 命令</span><span></span></div>
+<pre><code>/redo</code></pre>
+
+<p>终端界面还有默认快捷键：</p>
+
+<table>
+<thead>
+<tr><th>动作</th><th>命令</th><th>快捷键</th></tr>
+</thead>
+<tbody>
+<tr><td>暂存上一条消息的回滚</td><td><code>/undo</code></td><td><code>&lt;leader&gt;u</code></td></tr>
+<tr><td>取消已暂存的回滚</td><td><code>/redo</code></td><td><code>&lt;leader&gt;r</code></td></tr>
+</tbody>
+</table>
+
+<p>也可以选中更早的一条消息，选择 <strong>Revert</strong>，把回滚点暂存到那个位置。</p>
+
+<h2>捕获（Capture）</h2>
+<p>每个模型步骤中，OpenCode 会在调用模型之前立即尝试拍一次快照，并在该步骤达到一次记录的成功或失败时再拍一次。assistant 消息会记录这两次快照之间哪些路径发生了变化：</p>
+
+<div class="term-head"><span>text</span><span>时序示意</span></div>
+<pre><code>before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts</code></pre>
+
+<p>捕获是尽力而为（best effort）。如果任何一侧快照不可用，对话照常继续，但那一步可能没有可供恢复的文件改动记录。</p>
+
+<h2>覆盖范围（Scope）</h2>
+<p>快照覆盖 Git worktree 中会话的活动目录。比如会话在 <code>packages/app</code> 中打开，就只捕获 <code>packages/app</code> 之下的符合条件的文件，仓库其它位置的改动不在内：</p>
+
+<table>
+<thead>
+<tr><th>内容</th><th>是否捕获</th><th>示例</th></tr>
+</thead>
+<tbody>
+<tr><td>活动目录内被 Git 跟踪的文件</td><td>是</td><td><code>packages/app/src/app.tsx</code></td></tr>
+<tr><td>未被忽略的未跟踪文件，每个不超过 2 MiB</td><td>是</td><td><code>packages/app/notes.txt</code></td></tr>
+<tr><td>被 Git 忽略的文件</td><td>否</td><td><code>packages/app/dist/app.js</code></td></tr>
+<tr><td>超过 2 MiB 的单个未跟踪文件</td><td>否</td><td><code>packages/app/debug.log</code></td></tr>
+<tr><td>活动目录之外的文件</td><td>否</td><td><code>packages/server/src/index.ts</code></td></tr>
+<tr><td>Git 元数据和其它副作用</td><td>否</td><td>提交、分支、数据库、进程</td></tr>
+</tbody>
+</table>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>文件系统快照<strong>需要一个 Git 仓库</strong>。在 Git 仓库之外，<code>/undo</code> 仍然可以回滚对话历史，但无法恢复文件。</p>
+</aside>
+
+<h2>恢复（Restore）</h2>
+<p>回滚只恢复「所选对话边界之后、归属于 assistant 步骤」的那些路径。每个路径回到第一个被撤销步骤之前的状态；如果某个文件是这些步骤新建的、当时并不存在，就把它删除：</p>
+
+<table>
+<thead>
+<tr><th>时间线</th><th><code>src/api.ts</code></th><th><code>src/new.ts</code></th></tr>
+</thead>
+<tbody>
+<tr><td>所选边界</td><td>版本 A</td><td>不存在</td></tr>
+<tr><td>之后的 assistant 步骤</td><td>版本 B</td><td>被创建</td></tr>
+<tr><td>回滚之后</td><td>版本 A</td><td>被删除</td></tr>
+</tbody>
+</table>
+
+<p>不属于这些步骤的路径不会被碰。受影响路径上的当前未保存修改可能被覆盖，所以继续工作前先看一下恢复摘要和 <code>git diff</code>：</p>
+
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>git diff --stat
+git diff</code></pre>
+
+<h2>存储（Storage）</h2>
+<p>OpenCode 把快照存储在本地：数据目录下一个独立的内部 Git 对象数据库。快照捕获<strong>不会</strong>创建提交、移动分支，也不会有意改动你仓库的索引：</p>
+
+<div class="term-head"><span>sh</span><span>捕获后你的仓库仍是普通的脏工作区</span></div>
+<pre><code># Your repository remains an ordinary dirty worktree after capture.
+git status --short</code></pre>
+
+<p>快照对象可能包含被跟踪文件和符合条件的未跟踪文件的<strong>完整内容</strong>。请把 OpenCode 数据目录当作敏感的本地数据对待。</p>
+
+<h2>设置（Settings）</h2>
+<p>快照默认启用。在<a href="config.html">配置</a>里把 <code>snapshots</code> 设为 <code>false</code> 可以停止今后的文件系统捕获：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}</code></pre>
+
+<p>禁用快照<strong>不会</strong>删除已存储的快照。对话回滚仍然可用，但没有捕获的文件系统状态就无法恢复相关的文件改动了。</p>
+
+<h2>安全性（Safety）</h2>
+<p>快照是便利工具，不是事务，也不是备份：</p>
+<ul>
+<li>shell 命令可能改变服务、进程、网络资源、数据库、Git 状态、被忽略的输出或活动目录之外的文件。<strong>恢复快照不会撤销这些效果。</strong></li>
+<li>被中断或失败的工作，可能在捕获失败或没有可用快照对时留下改动。</li>
+<li>恢复受影响路径会覆盖其当前内容。取消一次已暂存的回滚也可能覆盖更晚的编辑。</li>
+<li>会话运行期间 OpenCode 会拒绝回滚操作，但外部编辑器和命令仍可能在捕获和恢复之间改动工作区。</li>
+<li>提交一次回滚只是把消息从当前对话视图中移除，并不会从持久化的会话历史或已有的快照存储中删除。它<strong>不是</strong>安全擦除。</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>在一个有未提交改动的脏工作区里使用 <code>/undo</code> 之前，先把重要工作提交或备份。一句话记住快照的定位：<strong>它负责「智能体刚刚改的文件 + 刚才那句 prompt」，Git 负责「一切真正重要的东西」</strong>。两者互补，不能互相替代。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

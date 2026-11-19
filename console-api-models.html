@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API · 模型 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-api-models" data-group="Console" data-src="https://opencode.ai/docs/console/api/models/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>API · 模型</h1>
+<p class="lede">模型列表 API 有两类：Console 列表返回工作区能用的全部模型（含已接入的自定义提供商），推理列表则按 OpenAI 的格式返回公开的 OpenCode Models 和 Go 目录。</p>
+
+<table>
+<thead>
+<tr><th>列表</th><th>返回内容</th><th>是否需要 Key</th></tr>
+</thead>
+<tbody>
+<tr><td><code>/console/api/v1/models</code></td><td>调用方能用的每一个提供商和模型，并套用工作区的修改。</td><td>必需</td></tr>
+<tr><td><code>/inference/v1/models</code></td><td>OpenCode Models。不带 key 时返回所有公开模型；带 key 时返回其工作区能用的模型。</td><td>可选</td></tr>
+<tr><td><code>/inference/go/v1/models</code></td><td><a href="console-go.html">Go</a> 订阅的模型，格式与上者相同。</td><td>可选</td></tr>
+</tbody>
+</table>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>怎么选？如果你在写一个「跟 OpenCode 客户端一样」的工具——希望用户看到的模型选项和 OpenCode 里完全一致（连他自己接入的 OpenAI、Anthropic 连接都在内），就用 <strong>Console 列表</strong>。如果你只是想查查「OpenCode 平台目前有哪些公开模型」，或者手上还没有 key 只想看看公开目录，就用<strong>推理列表</strong>，它免认证也能调。</p>
+</aside>
+
+<h2 id="console-model-list">Console 模型列表</h2>
+<p><code>GET https://opencode.ai/console/api/v1/models</code> 返回调用方能用的每一个提供商，以及每个提供商之下它能调用的模型。</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."</code></pre>
+
+<p>任何工作区成员都可以调用：凭浏览器会话、OpenCode 登录、<a href="console-api.html#personal-api-keys">个人 API key</a>，或带有 <strong>Models › Read</strong> 权限的<a href="console-api.html#service-accounts">服务账号 key</a>。它使用与 OpenCode 配置文件里 Console 生成的部分相同的规则，因此返回的列表与 OpenCode 里 <code>/models</code> 命令显示的内容一致。响应永不缓存（<code>Cache-Control: private, no-store</code>）。</p>
+
+<h3>提供商（Providers）</h3>
+<p>响应是一个以提供商 ID 为键的对象，这个 ID 就是 OpenCode 所使用的 ID：</p>
+
+<table>
+<thead>
+<tr><th>提供商 ID</th><th>提供商</th></tr>
+</thead>
+<tbody>
+<tr><td><code>opencode</code></td><td><a href="console-models.html">OpenCode Models</a>，从工作区额度（credits）扣费。</td></tr>
+<tr><td><code>opencode-go</code></td><td><a href="console-go.html">Go</a> 订阅的模型。只有订阅了 Go 才会出现。</td></tr>
+<tr><td><code>console-&lt;connection slug&gt;</code></td><td>工作区添加的<a href="console-providers.html">连接（connection）</a>，例如 <code>console-openai</code>、<code>console-anthropic</code> 或 <code>console-aws-bedrock</code>。</td></tr>
+</tbody>
+</table>
+
+<p>每个提供商都有 <code>id</code>、<code>name</code> 和 <code>models</code> 字段。<code>name</code> 是 OpenCode 界面里显示的名字，通常是「工作区名 + 提供商名」。<code>models</code> 是一个以模型 ID 为键的对象。</p>
+
+<h3>示例</h3>
+<p>截取到一个提供商、一个模型的精简版：</p>
+
+<div class="term-head"><span>json</span><span>响应示例（精简）</span></div>
+<pre><code>{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}</code></pre>
+
+<h3>字段（Fields）</h3>
+<p>每个模型都是 <a href="https://models.dev" target="_blank" rel="noopener">models.dev</a> 的 v2 条目，再套用工作区的修改，所以字段就是 <a href="https://models.dev/experimental/v2.0/api.json" target="_blank" rel="noopener">models.dev 发布的那些</a>。被停用的模型、以及 models.dev 标记为已弃用（deprecated）的模型不会出现在列表里。</p>
+
+<table>
+<thead>
+<tr><th>字段</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td><code>type</code></td><td>模型类型。目前只列出 <code>chat</code>；决策、语音、图像模型未来可能会加入。</td></tr>
+<tr><td><code>id</code></td><td>发请求时使用的模型 ID。它同时也是 <code>models</code> 里的键。</td></tr>
+<tr><td><code>name</code></td><td>显示名称。</td></tr>
+<tr><td><code>limit</code></td><td><code>context</code> 是上下文窗口；<code>input</code> 在模型设有输入上限时限制单次请求的输入；<code>output</code> 限制响应长度。</td></tr>
+<tr><td><code>cost</code></td><td>每 100 万 token 的美元价格：<code>text.input.price</code>、<code>text.input.cache.read</code>、<code>text.input.cache.write</code> 和 <code>text.output.price</code>。<code>0</code> 表示免费；缺少缓存字段表示该模型没有缓存定价。部分模型还带 <code>cost.multipliers</code>，表示在指定时段价格上浮。</td></tr>
+<tr><td><code>capabilities</code></td><td>模型能做什么，比如工具调用和推理力度（reasoning effort）。</td></tr>
+<tr><td><code>modalities</code></td><td>接受的输入类型（如 <code>text</code>、<code>image/png</code>、<code>application/pdf</code>）和输出类型。</td></tr>
+<tr><td><code>api</code></td><td>调用该模型用的 Console URL 和 SDK。见下文「模型 API」。</td></tr>
+</tbody>
+</table>
+
+<h3>模型 API（Model API）</h3>
+<p><code>api</code> 字段有一个条目，键为模型所讲的协议：<code>chat-completions</code> 对应 OpenAI Chat Completions，<code>responses</code> 对应 OpenAI Responses，<code>messages</code> 对应 Anthropic Messages，<code>generate-content</code> 对应 Gemini。内容是该协议在 models.dev 的条目，只是把厂商的 URL 换成了 Console 的，并删去其余协议。</p>
+
+<table>
+<thead>
+<tr><th>字段</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td><code>base_url</code></td><td>该模型请求发往的地址。OpenCode Models 用 <code>https://opencode.ai/inference/...</code>，Go 用 <code>https://opencode.ai/inference/go/...</code>，自定义连接用它的 Console API URL：<code>https://opencode.ai/inference/custom/&lt;connection_id&gt;</code>。</td></tr>
+<tr><td><code>sdk.aisdk</code></td><td>该协议对应的 AI SDK 包，与<a href="console-models.html#endpoints">模型端点</a>表中的相同。</td></tr>
+<tr><td><code>sdk.opencodeai</code></td><td>OpenCode 加载的配套提供商模块。</td></tr>
+</tbody>
+</table>
+
+<p>你自己接入的连接上的模型，其 <code>api</code> 长这样。按 <a href="console-api-providers.html#endpoints">Providers API</a> 的说明，把协议路径（如 <code>/chat/completions</code> 或 <code>/responses</code>）拼在 <code>base_url</code> 后面即可：</p>
+
+<div class="term-head"><span>json</span><span>自定义连接的 api 字段</span></div>
+<pre><code>"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}</code></pre>
+
+<h2 id="inference-model-lists">推理模型列表（Inference model lists）</h2>
+<p><code>GET https://opencode.ai/inference/v1/models</code> 列出 OpenCode Models，<code>GET https://opencode.ai/inference/go/v1/models</code> 列出 Go 模型。两者都返回 OpenAI 的列表格式：</p>
+
+<div class="term-head"><span>bash</span><span>无需认证</span></div>
+<pre><code>curl https://opencode.ai/inference/v1/models</code></pre>
+
+<p>截取到一个模型及其常见字段的精简版：</p>
+
+<div class="term-head"><span>json</span><span>响应示例（精简）</span></div>
+<pre><code>{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}</code></pre>
+
+<p>不带 key 时，列表包含所有公开模型；带 key 时，只包含该 key 所属工作区能用的模型——因此服务账号 key 需要 <strong>Models › Read</strong> 权限。key 通过 <code>Authorization: Bearer</code> 或 <code>x-api-key</code> 传入。只列出 chat 类型的模型；私有模型和已弃用模型不会出现。</p>
+
+<p>每个条目先给出 OpenAI 的 <code>id</code>、<code>object</code>、<code>created</code>、<code>owned_by</code>，然后是与 <a href="#fields">Console 列表</a>相同的 models.dev 字段：<code>name</code>、<code>type</code>、<code>limit</code>、<code>cost</code>、<code>capabilities</code>、<code>modalities</code>、<code>api</code>、<code>family</code>、<code>release_date</code> 等等。与 Console 列表不同的是，推理列表<strong>不包含工作区接入的自定义连接</strong>。如果 models.dev 的数据暂时不可用，条目仍会返回，但只有 OpenAI 的字段，且 <code>name</code> 等于 ID。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>每个 Go 模型还多一个 <code>go</code> 字段，描述订阅相关的规则：<code>monthly_usage</code>（各套餐的每月用量上限）、<code>training</code>（是否用你的请求做训练）、<code>zdr</code>（是否完全不保留你的数据，Zero Data Retention）、<code>limited_regions</code>（是否在某些国家/地区不可用）。写面向 Go 用户的工具时可以用这些字段做合规提示。</p>
+</aside>
+
+<h2>错误码</h2>
+
+<table>
+<thead>
+<tr><th>状态码</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td><code>401</code></td><td>未提供凭证，或 key 已过期/被吊销。</td></tr>
+<tr><td><code>403</code></td><td>该 key 无权列出模型。服务账号 key 和受限 key 需要 <strong>Models › Read</strong> 权限。</td></tr>
+</tbody>
+</table>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI 简介 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-intro" data-group="CLI" data-src="https://opencode.ai/docs/cli/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>CLI 简介</h1>
+<p class="lede">在项目目录里运行 <code>opencode</code> 就能打开全屏终端界面。这一页还覆盖自动化执行、迷你界面、后台服务、路径查询与卸载等命令行日常操作。</p>
+
+<h2>打开终端界面</h2>
+<p>在项目里直接运行：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode</code></pre>
+<p>传入一个目录，可以在另一个项目里工作：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode ~/code/my-project</code></pre>
+
+<h3>推荐终端</h3>
+<p>以下终端对 OpenCode 的支持最好：</p>
+<ul>
+<li><a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a></li>
+<li><a href="https://wezterm.org" target="_blank" rel="noopener">WezTerm</a></li>
+<li><a href="https://alacritty.org" target="_blank" rel="noopener">Alacritty</a></li>
+<li><a href="https://sw.kovidgoyal.net/kitty/" target="_blank" rel="noopener">Kitty</a></li>
+</ul>
+<p>终端支持 Truecolor（真彩色）时，主题才能显示最准确的颜色；不支持的终端只能用现有调色板做近似模拟。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>怎么判断自己的终端是否支持 Truecolor？在终端里执行 <code>echo $COLORTERM</code>，如果输出 <code>truecolor</code> 或 <code>24bit</code> 就没问题。Windows Terminal、iTerm2、Ghostty 等现代终端基本都支持；一些老牌的 Linux 终端可能只有 256 色，主题会自动降级但仍可用。</p>
+</aside>
+
+<h2>自动化：opencode run</h2>
+<p>用 <code>opencode run</code> 可以不打开交互界面，直接提交一个 prompt 并拿到模型输出。它专为脚本、CI 任务以及其它「只要结果、不要界面」的场景设计：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode run "Explain this repository"</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>可以把 <code>opencode run</code> 想成「无头模式」：平时用 TUI 是坐进驾驶座开车，<code>run</code> 则是派一台自动驾驶车替你跑一趟。写 CI 脚本让模型自动审查一次提交、生成一份文档摘要，都属于这类用法——不需要人盯着界面，只要最终输出。</p>
+</aside>
+
+<h2>迷你界面：opencode mini</h2>
+<p>用 <code>opencode mini</code> 可以启动 OpenCode 的极简交互界面，而不是全屏 TUI：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mini</code></pre>
+<p>运行 <code>opencode mini --help</code> 可以查看它关于会话、模型、agent、prompt 和重放（replay）的全部选项。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><code>mini</code> 适合「顺手问一句」的场景：比如在调试某个函数时临时问模型一句话，不想让全屏 TUI 接管整个窗口。功能上它和 TUI 共享同一套后台服务与会话数据，所以在小界面里开的会话，之后照样能在完整 TUI 里继续。</p>
+</aside>
+
+<h2>后台服务</h2>
+<p>默认情况下，OpenCode 会为你的用户账号发现或启动<strong>一个共享的后台服务器</strong>。所有本地 OpenCode 客户端（TUI、mini、桌面应用等）都连接到这个服务器，由它统一管理会话、配置、集成、权限和工具执行。</p>
+<p>如果想要独立运行，用 <code>--standalone</code> 启动一个私有服务器；或者用 <code>--server</code> 连接到指定的服务器地址：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode --standalone
+opencode --server http://localhost:4096</code></pre>
+<p>如果想让 CLI 命令默认使用私有服务器、不再启动共享服务，可以把它禁用：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set disabled true
+opencode</code></pre>
+<p>这样会停止正在运行的后台服务。此后 <code>--server</code> 仍可连接显式指定的服务器；<code>opencode service start</code> 也仍能手动启动共享服务。想恢复自动使用共享服务，运行 <code>opencode service unset disabled</code>。<strong>注意：</strong>配对功能（pairing）依赖共享服务，禁用后不可用。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>禁用共享服务会影响的不只是命令行：所有本地客户端都靠这台服务器中转会话与工具执行，禁用后各客户端将各自为战。排查共享服务问题时见<a href="troubleshooting.html">故障排查</a>；服务器端点的完整列表见 <a href="api.html">HTTP API</a> 参考。</p>
+</aside>
+
+<h2>路径查询</h2>
+<p>用 <code>opencode debug paths</code> 可以打印某个本地路径，给其它工具使用：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode debug paths db
+sqlite3 "$(opencode debug paths db)"</code></pre>
+<p>可选的选择器参数接受 <code>db</code>、<code>home</code>、<code>data</code>、<code>config</code>、<code>cache</code>、<code>state</code>、<code>tmp</code>、<code>bin</code>、<code>log</code> 或 <code>repos</code>，输出只有路径本身加一个换行。数据库路径会遵循发布渠道和 <code>OPENCODE_DB</code> 环境变量；相对路径的数据库覆盖值会解析到 data 目录之下，<code>:memory:</code> 则原样打印。这个命令不会启动服务器，也不会打开数据库。</p>
+<p>省略选择器可以带标签列出全部路径：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode debug paths</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把 <code>debug paths</code> 理解成「问路」命令：OpenCode 的会话数据库、缓存、日志分散在系统各个角落，手写这些路径既容易错又随版本变化。用这个命令拿到的永远是当前安装的准确路径，直接塞给 <code>sqlite3</code> 或备份脚本即可。</p>
+</aside>
+
+<h2>卸载</h2>
+<p>先预览将要删除的文件和安装内容：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode uninstall --dry-run</code></pre>
+<p>确认无误后运行 <code>opencode uninstall</code> 正式删除。OpenCode 会先停止已注册的后台服务和持久终端，再移除全局缓存目录（该目录由 OpenCode 各版本和渠道共享）。<strong>会话数据、配置和状态永远不会被删除。</strong></p>
+<ul>
+<li><code>--force</code>（<code>-f</code>）跳过确认提示，适合在脚本等非交互场景中使用。</li>
+<li>包管理器方式安装的会调用检测到的包管理器卸载；curl 方式安装的会打印出手动删除可执行文件的最终命令。</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「卸载不删会话」是个贴心设计：即使卸载后重新安装，你之前的会话历史和配置也原样保留。如果你确实想彻底清空（例如换机或排查疑难问题），可以在卸载前用 <code>opencode debug paths</code> 找到 data 目录手动清理——但请务必先备份，里面是所有会话记录。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

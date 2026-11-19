@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TUI 主题 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-theme" data-group="CLI" data-src="https://opencode.ai/docs/cli/theme/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>TUI 主题</h1>
+<p class="lede">OpenCode 自带大量明暗两套的内置主题：可以在设置里直接选，也可以调出自己的配色。本页讲如何选择、安装、在插件里使用，以及如何从零创建一个主题。</p>
+
+<h2>选择主题</h2>
+<p>按 <kbd>Ctrl+P</kbd>，选择 <strong>Open settings</strong>，再打开 <strong>Theme</strong>。默认主题是 <code>opencode</code>。</p>
+<p>也可以在全局 <a href="cli-config.html">CLI 设置</a>里直接写：</p>
+<div class="term-head"><span>~/.config/opencode/cli.json</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}</code></pre>
+<p>不想打开设置的话，运行 <code>/themes</code> 也能随时换主题。</p>
+
+<h2>系统配色</h2>
+<p>当 OpenCode 能读到终端调色板时，主题选择器里会出现 <code>system</code> 主题。它从终端的前景色、背景色和 ANSI 调色板推导出整套颜色。</p>
+<p>主题名 <code>system</code> 表示使用从终端提取的颜色；<code>mode</code> 设为 <code>system</code> 则表示跟随终端的明暗外观。</p>
+
+<h2>模式（Mode）</h2>
+<p>用 <code>system</code> 跟随终端外观，或把主题锁定为亮色 / 暗色：</p>
+<table>
+<thead><tr><th>模式</th><th>行为</th></tr></thead>
+<tbody>
+<tr><td><code>system</code></td><td>跟随终端检测到的亮色或暗色外观。</td></tr>
+<tr><td><code>dark</code></td><td>始终使用该主题的暗色配色。</td></tr>
+<tr><td><code>light</code></td><td>始终使用该主题的亮色配色。</td></tr>
+</tbody>
+</table>
+<p>它对应 CLI 配置中 <code>theme</code> 里的 <code>mode</code> 字段。如果自定义主题只提供了一种模式，当请求另一种模式时 OpenCode 会使用已有的那种。</p>
+
+<h2>添加主题</h2>
+<p>要添加你下载或别人发给你的主题，把它的 JSON 文件复制进全局主题目录：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>cp theme.json ~/.config/opencode/themes/</code></pre>
+<p>也可以把主题放进项目的 <code>.opencode/themes</code> 目录，让它只在那个项目里可用。</p>
+<p>文件名就是主题名。例如 <code>my-theme.json</code> 会显示为 <code>my-theme</code>。添加文件后重启 OpenCode，再运行 <code>/themes</code> 选择它。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>OpenCode 只读 <code>.json</code> 文件——把主题存成 <code>.jsonc</code> 或 <code>.txt</code> 是不会被识别的。同名主题有就近覆盖规则：离当前目录更近的主题会替换全局目录或父目录里的同名主题。改完文件别忘了重启，热重载对主题文件不生效。</p>
+</aside>
+
+<h2>在插件中使用主题</h2>
+<p><a href="build-plugins-cli.html">TUI 插件</a>通过 <code>context.theme</code> 读取解析后的颜色，通过 <code>context.themeMode</code> 读取当前模式。使用语义 token（semantic token），插件就能自动跟随用户选择的主题：</p>
+<div class="term-head"><span>tsx</span><span>TUI 插件组件内部</span></div>
+<pre><code>import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return &lt;text fg={context.theme.text.base}&gt;Ready&lt;/text&gt;
+}</code></pre>
+<p>公开的 TUI 插件 API 不注册主题。想添加自定义主题定义，请使用上文目录里的 JSON 文件。</p>
+
+<h2>创建主题</h2>
+<p>推荐使用官方的<a href="https://opencode.ai/theme/" target="_blank" rel="noopener">主题工具</a>来创建或编辑主题：它直观地展示主题结构，改起来方便，也支持定义自定义颜色。下文的解释仅作参考。</p>
+
+<p>一个主题把<strong>共享的语义 token</strong> 与<strong>各模式专属的调色板</strong>分开：</p>
+<table>
+<thead><tr><th>部分</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>base</code></td><td>所有模式共享的完整 token 树。</td></tr>
+<tr><td><code>light</code>、<code>dark</code></td><td>该模式的完整色相（hue）调色板，以及可选的 token 覆盖。</td></tr>
+</tbody>
+</table>
+<p>每个主题都必须提供完整的 <code>base</code>，并至少定义 <code>light</code> 或 <code>dark</code> 之一。模式从文件自己的 <code>base</code> 继承——不从内置 OpenCode 主题继承，模式之间也不互相继承。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把主题文件想成一张「双层设计图」：<code>base</code> 是设计规范（「正文文字用中性灰、边框要柔和」），<code>light</code> 和 <code>dark</code> 是同一规范下的两张实物渲染稿——亮色稿里墨水是深色，暗色稿里墨水是浅色，但「哪里该是正文色、哪里该是边框」的骨架完全一致。改规范一处，两种模式一起变；只想暗色特殊处理，就在 <code>dark</code> 里单独覆盖。</p>
+</aside>
+
+<p>下面的示例只展示与各概念相关的部分。定制前请先用主题编辑器生成完整文件。</p>
+
+<h3>结构</h3>
+<p>两种模式都用的颜色放进 <code>base</code>，需要时再在 <code>light</code> 或 <code>dark</code> 里覆盖：</p>
+<div class="term-head"><span>theme.json（节选）</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}</code></pre>
+<p>完整的 <code>base</code> 提供每个语义 token；每种模式提供全部必需的色相，并可以覆盖 base token 树的任意部分。</p>
+
+<h3>颜色与引用</h3>
+<p>颜色可以是十六进制值、<code>"transparent"</code>，或对主题内另一个颜色的引用：</p>
+<div class="term-head"><span>base 或模式内部</span><span></span></div>
+<pre><code>{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}</code></pre>
+
+<h3>色相（Hues）</h3>
+<p>色相是九级色阶。每种模式要定义八个基础色相和三个别名：</p>
+<table>
+<thead><tr><th>类别</th><th>取值</th></tr></thead>
+<tbody>
+<tr><td>基础色相</td><td><code>gray</code>、<code>red</code>、<code>orange</code>、<code>yellow</code>、<code>green</code>、<code>cyan</code>、<code>blue</code>、<code>purple</code></td></tr>
+<tr><td>别名</td><td><code>accent</code>、<code>interactive</code>、<code>neutral</code></td></tr>
+<tr><td>色阶</td><td><code>100</code>、<code>200</code>、<code>300</code>、<code>400</code>、<code>500</code>、<code>600</code>、<code>700</code>、<code>800</code>、<code>900</code></td></tr>
+</tbody>
+</table>
+<p>基础色相要定义全部九级，或者把一个别名直接指向另一个色相：</p>
+<div class="term-head"><span>light 或 dark 内部</span><span></span></div>
+<pre><code>{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}</code></pre>
+<p>色阶的方向跟随模式的对比方向：亮色主题从 <code>100</code>（深）渐变到 <code>900</code>（浅）；暗色主题从 <code>100</code>（浅）渐变到 <code>900</code>（深）。</p>
+<p><code>base</code> 里的 <code>categorical</code> 数组设定用于区分 agent 和其它重复项的色相顺序：</p>
+<div class="term-head"><span>base 内部</span><span></span></div>
+<pre><code>{
+  "categorical": ["accent", "purple", "green", "blue"]
+}</code></pre>
+
+<h3>语义 token</h3>
+<p>语义 token 给 UI 角色分配颜色。组件使用这些角色，而不是直接挑颜色。</p>
+<table>
+<thead><tr><th>组</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>text</code></td><td>正文、次要、弱化、动作、表单字段和反馈文字。<code>faint</code> 默认等于 <code>muted</code>。</td></tr>
+<tr><td><code>background</code></td><td>基础底色、抬升表面、动作、表单字段和反馈填充。</td></tr>
+<tr><td><code>border</code>、<code>scrollbar</code></td><td>边框和滚动条颜色。</td></tr>
+<tr><td><code>diff</code></td><td>新增、删除、上下文、高亮和行号颜色。</td></tr>
+<tr><td><code>syntax</code></td><td>源码高亮。</td></tr>
+<tr><td><code>markdown</code></td><td>Markdown 元素。</td></tr>
+</tbody>
+</table>
+<p>例如 <code>text.muted</code> 控制次要文字，<code>background.raised</code> 定义逐级抬升的表面：</p>
+<div class="term-head"><span>base 内部</span><span></span></div>
+<pre><code>{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}</code></pre>
+<p>语法（syntax）键有：<code>comment</code>、<code>keyword</code>、<code>function</code>、<code>variable</code>、<code>string</code>、<code>number</code>、<code>type</code>、<code>operator</code>、<code>punctuation</code>。</p>
+<p>Markdown 键有：<code>text</code>、<code>heading</code>、<code>link</code>、<code>linkText</code>、<code>code</code>、<code>blockQuote</code>、<code>emphasis</code>、<code>strong</code>、<code>horizontalRule</code>、<code>listItem</code>、<code>listEnumeration</code>、<code>image</code>、<code>imageText</code>、<code>codeBlock</code>。</p>
+
+<h3>动作与状态</h3>
+<p>动作有 <code>primary</code>、<code>secondary</code>、<code>destructive</code> 三种变体。动作和表单字段使用 <code>base</code> 加可选的交互状态：</p>
+<div class="term-head"><span>base 或模式内部</span><span></span></div>
+<pre><code>{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}</code></pre>
+<p>状态键有 <code>$hovered</code>、<code>$focused</code>、<code>$pressed</code>、<code>$selected</code> 和 <code>$disabled</code>。未指定的状态直接使用该动作或表单字段的 <code>base</code> 颜色。</p>
+
+<h3>对话框表面</h3>
+<p>面板、对话框、菜单和 toast 从 <code>background.raised</code> 中选取深度。对话框还可以用 <code>@dialog</code> 额外覆盖语义 token：</p>
+<div class="term-head"><span>base 或模式内部</span><span></span></div>
+<pre><code>{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}</code></pre>
+<p>TUI 在应用 <code>@dialog</code> 之后会<strong>重新解析引用</strong>，所以引用 <code>$background.base</code> 的 token 会跟随对话框的背景色。上下文动作的 <code>base</code> 成为其未指定状态的回退值；显式的状态覆盖依然优先。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「语义 token + 色相引用」这套体系的核心价值是解耦：组件永远只说「给我 text.muted」，至于 muted 到底是浅灰还是深灰，由主题和模式决定。所以给 OpenCode 做一个新主题时，不需要理解任何界面的内部实现，只要把八个基础色相铺满九级、再把 base token 树填好，整界面的观感就成型了。想参考成品可以直接读内置主题的 JSON 文件。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

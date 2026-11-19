@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effect 客户端 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-client-effect" data-group="构建与集成" data-src="https://opencode.ai/docs/build/client/effect/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Effect 客户端</h1>
+<p class="lede"><code>@opencode/client/effect</code> 是 OpenCode HTTP API 的 Effect 原生客户端。它返回类型化的 Effect 和 Stream，并把响应解码为 OpenCode schema 值。</p>
+
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>bun add @opencode/client effect@4.0.1</code></pre>
+
+<h2>创建客户端</h2>
+<p>用服务器 URL 创建客户端，然后调用按 API 资源分组的方法：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))</code></pre>
+
+<h2>请求头与请求（Headers and requests）</h2>
+<p>在传入的 <code>HttpClient</code> 上配置默认请求头。原生操作用正常的 Effect 中断（interruption）做取消。RPC 方法额外接受单次调用的 location、header 和 signal 选项：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =&gt;
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()</code></pre>
+
+<h2>流式事件（Stream events）</h2>
+<p>流式操作，如 <code>event.subscribe()</code> 和 <code>experimental.session.log()</code>，返回 Effect Stream：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) =&gt; Effect.logInfo("OpenCode event", { type: event.type })))</code></pre>
+
+<p>原生和 RPC 事件 Stream 在每个客户端上共享一条惰性连接。构造一个 Stream 不会连接；消费它才会。停止一个消费者不影响其它消费者继续运行；最后一个消费者离开时关闭源。源的 EOF 或失败会结束当前订阅，没有自动重试或重放。后到的原生消费者会先收到当前连接标记，再收到活性事件。</p>
+
+<h2>插件 RPC（Plugin RPC）</h2>
+<p>使用与 Promise 客户端和服务器插件相同的共享契约：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =&gt;
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )</code></pre>
+
+<ul>
+<li>方法参数和结果从契约推断。第二个可选参数持有 <code>location</code>、<code>signal</code> 和 <code>headers</code>；省略 location 时使用正常的请求默认值。</li>
+<li>调用随消费它的 Effect 一起被中断。</li>
+<li>方法错误映射被推断到 Effect 的错误通道里。已声明的错误按其数据 schema 解码。</li>
+<li>类型化子客户端会剥掉通用 HTTP RPC 错误包装；保留的 <code>rpc.*</code> 类型标识框架失败。</li>
+</ul>
+
+<p>RPC 事件是类型化的 Stream，不是回调式的 <code>on</code> 监听器。它们接收该 RPC 来自<strong>所有位置</strong>的事件，每个事件带必需的 <code>location</code> 和正常的带前缀类型，如 <code>rpc.acme.updated</code>。这与服务器插件句柄不同——后者固定在自己的位置上。定义、schema、注册和活性订阅语义见 <a href="build-plugins-effect-rpc.html">Effect 插件 RPC</a>。</p>
+
+<h2>本地后台服务（Local background service）</h2>
+<p>仅限 Node 的 <code>@opencode/client/effect/service</code> 入口，以 Effect 的方式发现、启动、认证并停止本地后台服务：</p>
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>bun add @effect/platform-node@4.0.1</code></pre>
+
+<p>为已确保（ensured）的服务创建一个带认证的客户端：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =&gt;
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)</code></pre>
+
+<p>只发现不启动，或停止确切的那个已注册服务：</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>Service</code> 入口是<strong>仅限 Node</strong> 的（<code>@opencode/client/effect/service</code>），还依赖 <code>@effect/platform-node</code>——浏览器里 import 它会直接挂掉。另外注意 <code>Service.headers(endpoint) ?? {}</code> 里的空对象兜底：端点没有凭据时不要传 <code>undefined</code> 给 <code>setHeaders</code>。</p>
+</aside>
+
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const endpoint = yield* Service.discover()
+yield* Service.stop()</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>和 <a href="build-client.html">Promise 客户端</a>逐条对齐着记：<code>await client.xxx()</code> ↔ <code>yield* client.xxx()</code>；<code>AbortSignal</code> 取消 ↔ Effect 中断；异步可迭代事件 ↔ Effect Stream；<code>events.on(...)</code> 回调 ↔ <code>events.subscribe(...)</code> Stream。<code>Service</code> 的 API 名两边完全一样（<code>ensure</code> / <code>discover</code> / <code>stop</code> / <code>headers</code>），只是返回值从 Promise 变成 Effect。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

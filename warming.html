@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会话预热 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="warming" data-group="配置" data-src="https://opencode.ai/docs/warming/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>会话预热</h1>
+<p class="lede">会话预热（Session Warming）在你停下思考的间隙，定期向模型发轻量请求，以保住提供商侧的提示词缓存（prompt cache）或其它短时效状态。默认关闭。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>很多模型提供商对「重复前缀」的请求给缓存折扣：同样的系统提示 + 对话历史第二次发过去时便宜得多——前提是缓存没过期。但你思考、开会、吃饭的半小时里不发请求，缓存就凉了，回来后第一条消息要重新全价计费。预热就像咖啡馆店员每隔几分钟往你的杯子里续一口热水，让这杯「缓存拿铁」一直保持温度，你回来接着喝就还是折扣价。</p>
+</aside>
+
+<h2>启用</h2>
+<p>在任意 <a href="config.html">OpenCode 配置文件</a>里启用预热：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}</code></pre>
+<p>在这个配置下，OpenCode 会在最近活跃的会话的提示词缓存恰好过期之前预热：按模型 <a href="models.html"><code>cache.ttl</code></a> 的 90%，没有该设置时每 4 分钟一次。它一直持续到距最近一次非预热请求已过 30 分钟。</p>
+
+<h2>选项</h2>
+<p>用对象形式可以修改预热提示词、空闲间隔或活跃窗口：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}</code></pre>
+<table>
+<thead>
+<tr><th>字段</th><th>默认值</th><th>用途</th></tr>
+</thead>
+<tbody>
+<tr><td><code>prompt</code></td><td>保活指令</td><td>作为临时用户消息附加到每次预热请求。默认的指令让模型什么都不做、不用任何工具、只回复 <code>OK</code>。</td></tr>
+<tr><td><code>interval</code></td><td><code>"auto"</code></td><td>距下一次预热请求的空闲时间。<code>"auto"</code> 用模型 <code>cache.ttl</code> 的 90%，没有则 4 分钟。</td></tr>
+<tr><td><code>duration</code></td><td><code>"30 minutes"</code></td><td>预热窗口，从最近一次非预热模型请求算起。</td></tr>
+</tbody>
+</table>
+<p>省略的对象字段保持默认值。比如这里只改间隔：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}</code></pre>
+
+<h2>自动间隔</h2>
+<p>默认 <code>interval</code> 为 <code>"auto"</code>，会在每个模型的提示词缓存即将过期时预热。OpenCode 用模型 <a href="models.html"><code>cache.ttl</code></a> 设置的 90%，所以 <code>"5m"</code> 的缓存每 4.5 分钟预热一次。没有 <code>cache.ttl</code> 的模型每 4 分钟预热一次。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}</code></pre>
+<p>比 <code>duration</code> 更长寿的缓存（比如 <code>"1h"</code> 配 30 分钟默认窗口）不会被预热，反正它本来就能活过整个预热窗口。OpenCode 会每会话记录一次这种情况。想预热它就把 <code>duration</code> 调大。</p>
+
+<h2>按提供商和模型设置</h2>
+<p>在提供商或模型上设置 <code>settings.cache.warming</code>，可以只预热它的会话，或给它们单独的节奏。它的取值与顶层 <code>warming</code> 相同（<code>prompt</code> 除外），并覆盖顶层设置；模型设置又覆盖提供商设置。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}</code></pre>
+<p>这个例子里 Anthropic 的会话每 4.5 分钟预热一次，Claude Haiku 5.5 除外，其它提供商不预热。对象形式里省略的字段来自顶层 <code>warming</code>，再往上是默认值。无效的设置会记录警告并回退到顶层 <code>warming</code>。</p>
+
+<h2>时长写法</h2>
+<p><code>interval</code> 和 <code>duration</code> 接受时长字符串。两者都必须解析为大于零的有限值，且 <code>interval</code> 必须短于 <code>duration</code>；否则 OpenCode 跳过预热并记录警告：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}</code></pre>
+
+<h2>时机</h2>
+<p>预热从顶层会话里某次非预热模型请求之后开始。子智能体（subagent）会话不预热。每个间隔从「最近一次请求或预热请求发出时」起算，而不是从响应结束起算——因为提供商的缓存寿命从请求抵达它那一刻开始。预热请求不会延长活跃窗口：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops</code></pre>
+<p>任何新的非预热模型活动（包括压缩 compaction）都会重置两个计时器。显式设置的间隔如果大于等于 <code>duration</code>，会被拒绝并警告；<code>"auto"</code> 间隔达到这个长度时跳过预热，因为缓存本来就活得过窗口：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops</code></pre>
+<p>当某个模型请求（包括压缩）正在运行时，OpenCode 绝不发送预热请求。间隔到期时如果请求还没结束，预热会等它结束、且该请求的缓存尚未过期时立即补发；如果缓存已过期，预热停止，直到下一次正常请求：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request</code></pre>
+
+<h2>请求内容</h2>
+<p>预热请求使用会话当前的模型、智能体、指令和对话上下文。OpenCode 临时附加配置的提示词、做一次模型调用、然后丢弃响应：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded</code></pre>
+<p>这个请求不让新输入进入、不往历史里加消息、也不改动会话的持久状态。OpenCode 不派发本地工具调用、也不延续工具循环；默认提示词还明确让模型不要使用工具。</p>
+
+<h2>失败处理</h2>
+<p>预热失败只记录日志，不会让会话失败或改变会话。OpenCode 等到下一个间隔再试，同时原有的活跃窗口继续倒计时：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>00:04  warming request fails; session is unchanged
+00:08  next warming attempt</code></pre>
+<p>如果一次预热请求「没吃到缓存」（从缓存读的量少于写入的量），该会话的预热会停止，直到下一次非预热请求。不报告缓存用量的提供商永远不会算作 miss：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request</code></pre>
+
+<h2>成本</h2>
+<p>预热请求是真实的提供商请求：会消耗 token、产生费用、占用速率限额，也会像其它模型请求一样失败。</p>
+<ul>
+<li>间隔越短，请求量越大。</li>
+<li>窗口越长，允许的预热请求越多。</li>
+<li>只有当提供商侧的收益值得这些额外用量时，才开启预热。</li>
+</ul>
+<p>比如对一个没有 <code>cache.ttl</code> 的模型，默认配置在一次不间断的 30 分钟窗口里最多允许 7 次预热：在第 4、8、12、16、20、24、28 分钟。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>预热是「花钱保折扣」的交易，不是免费的优化。如果缓存折扣低于 50%，一次成功的预热要用掉真金白银的 token 换一份省钱的机会；对便宜模型或短会话，这笔账可能不划算。开之前先看清楚：你的模型有没有 <code>cache.ttl</code>？你的暂停真的常超过缓存寿命吗？</p>
+</aside>
+
+<h2>禁用</h2>
+<p>把 <code>warming</code> 设为 <code>false</code> 显式禁用。省略该字段同样保持关闭：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "warming": false,
+}</code></pre>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

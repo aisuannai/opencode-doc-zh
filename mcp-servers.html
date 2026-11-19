@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP 服务器 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="mcp-servers" data-group="配置" data-src="https://opencode.ai/docs/mcp-servers/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>MCP 服务器</h1>
+<p class="lede">OpenCode 可以连接 MCP（Model Context Protocol，模型上下文协议）服务器，获得工具、提示词、资源和指令等能力。MCP 工具会占用模型上下文，所以只加你真正需要的服务器。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>MCP 是一个「外设标准」：任何程序只要按这个协议实现，就能把自己的一组工具插进任何 AI 客户端——就像 USB 设备插上就能用。OpenCode 支持 MCP 意味着你可以给智能体装上几乎无限的外挂：查数据库、管 Sentry 告警、搜 GitHub、读 Notion……不用自己写一行工具代码。</p>
+</aside>
+
+<h2>快速上手</h2>
+<p>在要用它的项目里添加一个远程服务器，然后检查连接：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list</code></pre>
+<p>这条命令会把服务器写进项目的<a href="config.html">配置</a>。加 <code>--global</code> 可以让它在所有项目里可用：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp add context7 --global --url https://mcp.context7.com/mcp</code></pre>
+<p>远程服务器默认使用 OAuth。如果列表显示 <code>needs authentication</code>，打开 OpenCode 运行 <code>/mcps</code>，选中该服务器并完成登录。连上之后，智能体就能直接用了：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>✓ context7  connected</code></pre>
+
+<h2>配置</h2>
+<p>手动配置服务器时，在 <code>mcp.servers</code> 下给它一个唯一名称。V2 不允许把服务器名直接放在 <code>mcp</code> 下面。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}</code></pre>
+<p>服务器会自动连接。如果想保留配置但不连接，用 <code>disabled</code> 字段（不是 <code>enabled</code>）：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>更高优先级的项目配置会<strong>整个替换</strong>同名服务器对象，而不是逐字段合并。要么给不同连接/账号起不同名字，要么在覆盖时把所有必填字段全部重写一遍——漏一个就会连接失败。</p>
+</aside>
+
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}</code></pre>
+
+<h2>本地服务器</h2>
+<p>本地服务器是 OpenCode 通过 MCP stdio 传输启动的一条命令。用 <code>--</code> 之后跟命令来添加：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything</code></pre>
+<p>环境变量用重复的 <code>--env</code> 标志传入：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything</code></pre>
+<p>其它进程选项（比如工作目录）用配置文件写：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}</code></pre>
+<table>
+<thead>
+<tr><th>字段</th><th>必填</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td><code>type</code></td><td>是</td><td>必须是 <code>"local"</code>。</td></tr>
+<tr><td><code>command</code></td><td>是</td><td>可执行文件及其参数。</td></tr>
+<tr><td><code>cwd</code></td><td>否</td><td>进程目录。相对路径从工作区解析，这也是默认值。</td></tr>
+<tr><td><code>environment</code></td><td>否</td><td>追加到 OpenCode 继承的进程环境里的字符串变量。</td></tr>
+<tr><td><code>disabled</code></td><td>否</td><td>为 <code>true</code> 时阻止连接。默认 <code>false</code>。</td></tr>
+<tr><td><code>codemode</code></td><td>否</td><td>设为 <code>false</code> 可让工具直接暴露，而不是走 Code Mode。默认 <code>true</code>。</td></tr>
+<tr><td><code>timeout</code></td><td>否</td><td>针对单个服务器的超时覆盖。</td></tr>
+<tr><td><code>protocol</code></td><td>否</td><td><code>legacy</code>（默认）、<code>auto</code> 或 <code>2026-07-28</code>。见「协议版本」。</td></tr>
+<tr><td><code>pool</code></td><td>否</td><td>跨目录共享一条连接。默认 <code>false</code>。见「共享连接」。</td></tr>
+</tbody>
+</table>
+<p>环境变量替换用 <code>{env:NAME}</code> 写法。JSON 字符串里不会展开 <code>$NAME</code> 这类 shell 表达式：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}</code></pre>
+
+<h2>远程服务器</h2>
+<p>远程服务器使用 MCP Streamable HTTP 传输，要求绝对 URL：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp add context7 --url https://mcp.context7.com/mcp</code></pre>
+<p>请求头用重复的 <code>--header</code> 标志传入。<code>{env:NAME}</code> 引用要加引号，让 shell 原样写出：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'</code></pre>
+<p>其它选项用配置文件。密钥放在环境变量里，别写进文件：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}</code></pre>
+<table>
+<thead>
+<tr><th>字段</th><th>必填</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td><code>type</code></td><td>是</td><td>必须是 <code>"remote"</code>。</td></tr>
+<tr><td><code>url</code></td><td>是</td><td>绝对的 Streamable HTTP 端点。</td></tr>
+<tr><td><code>headers</code></td><td>否</td><td>发送到端点的字符串 HTTP 头。</td></tr>
+<tr><td><code>oauth</code></td><td>否</td><td>OAuth 设置，或设为 <code>false</code> 禁用 OAuth。</td></tr>
+<tr><td><code>disabled</code></td><td>否</td><td>为 <code>true</code> 时阻止连接。默认 <code>false</code>。</td></tr>
+<tr><td><code>codemode</code></td><td>否</td><td>设为 <code>false</code> 可让工具直接暴露，而不是走 Code Mode。默认 <code>true</code>。</td></tr>
+<tr><td><code>timeout</code></td><td>否</td><td>针对单个服务器的超时覆盖。</td></tr>
+<tr><td><code>protocol</code></td><td>否</td><td><code>legacy</code>（默认）、<code>auto</code> 或 <code>2026-07-28</code>。见「协议版本」。</td></tr>
+<tr><td><code>pool</code></td><td>否</td><td>跨目录共享一条连接。默认 <code>false</code>。见「共享连接」。</td></tr>
+</tbody>
+</table>
+<p>只有当服务器完全依赖 API key 或其它头凭证时，才用 <code>oauth: false</code>：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}</code></pre>
+
+<h2>OAuth</h2>
+<p>远程服务器默认启用 OAuth，除非把 <code>oauth</code> 设为 <code>false</code>。OpenCode 会发现授权服务器、用 PKCE 登录并自动刷新令牌。凭证存储在项目配置之外。</p>
+<p>大多数服务器只需要一个 URL：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}</code></pre>
+<p>如果服务器需要认证，运行 <code>/mcps</code>、选中它，然后在浏览器里完成授权。CLI 也能发起同样的流程：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp auth sentry</code></pre>
+
+<h3>浏览器不在本机时</h3>
+<p>当 OpenCode 通过 SSH、容器或远程服务器运行时，你登录之后浏览器无法回调到 OpenCode，会显示一个加载不出来的页面。把地址栏里那个页面的 URL 复制下来，粘贴到登录提示里：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>http://127.0.0.1:52817/callback?code=...&amp;state=...</code></pre>
+<p>在 OpenCode 等待浏览器的过程中，这个提示会出现在 <code>/mcps</code>、<code>opencode mcp auth</code>，以及桌面端和 Web 端的登录对话框里。</p>
+
+<h3>客户端注册</h3>
+<p>OpenCode 按以下顺序、用第一个适用的方式向授权服务器标识自己：</p>
+<table>
+<thead>
+<tr><th>方式</th><th>何时使用</th></tr>
+</thead>
+<tbody>
+<tr><td>预注册客户端</td><td>配置了 <code>oauth.client_id</code>。</td></tr>
+<tr><td><a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents" target="_blank" rel="noopener">Client ID Metadata Document</a>（CIMD）</td><td>授权服务器支持 CIMD 和公共客户端，且未设置 <code>oauth.redirect_uri</code>。</td></tr>
+<tr><td><a href="https://datatracker.ietf.org/doc/html/rfc7591" target="_blank" rel="noopener">动态客户端注册</a>（DCR）</td><td>前两者都不适用时。OpenCode 注册一个客户端并在之后的登录里复用。</td></tr>
+</tbody>
+</table>
+<p>授权服务器通过元数据声明支持 CIMD：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "issuer": "https://auth.example.com",
+  "client_id_metadata_document_supported": true,
+  "token_endpoint_auth_methods_supported": ["none"]
+}</code></pre>
+<p>使用 CIMD 时，OpenCode 把自己的元数据文档 URL 作为 <code>client_id</code> 发送，并跳过注册：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>https://opencode.ai/oauth/opencode/client.json</code></pre>
+<p>该文档允许以下不带端口的回环重定向：</p>
+<ul>
+<li><code>http://127.0.0.1/callback</code></li>
+<li><code>http://localhost/callback</code></li>
+<li><code>http://127.0.0.1/mcp/oauth/callback</code>（给较旧的客户端）</li>
+</ul>
+<p>按照 <a href="https://datatracker.ietf.org/doc/html/rfc8252#section-7.3" target="_blank" rel="noopener">RFC 8252</a> 的要求，授权服务器对这类重定向接受任意回环端口，所以 <code>callback_port</code> 与 CIMD 兼容；而自定义的 <code>redirect_uri</code> 不行，那种情况下 OpenCode 会退回 DCR。</p>
+<p>如果授权服务器既不支持 CIMD 也不支持 DCR，就配置预注册客户端。</p>
+
+<h3>预注册客户端</h3>
+<p>当提供商给了你客户端凭证时，用 V2 的 snake_case OAuth 字段：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}</code></pre>
+<table>
+<thead>
+<tr><th>字段</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td><code>client_id</code></td><td>预注册的客户端 ID。优先于 CIMD 和 DCR。</td></tr>
+<tr><td><code>client_secret</code></td><td>机密客户端（confidential client）的密钥，放在令牌请求体里发送。公共客户端省略它。</td></tr>
+<tr><td><code>scope</code></td><td>空格分隔的请求范围。默认使用服务器拒绝未认证请求时给出的 scope。</td></tr>
+<tr><td><code>callback_port</code></td><td>本地回调端口，1 到 65535。默认取 <code>redirect_uri</code> 的端口，其次取一个可用的临时端口。</td></tr>
+<tr><td><code>redirect_uri</code></td><td>预注册的回环 URI，其路径和端口要能到达本地回调监听器。设置它会禁用 CIMD。</td></tr>
+<tr><td><code>auth_server_metadata_url</code></td><td>授权服务器的 OAuth 或 OpenID Connect 元数据文档 URL。当 MCP 服务器没有公布指明其授权服务器的受保护资源元数据时设置它。</td></tr>
+</tbody>
+</table>
+<p>需要重新登录或切换账号时，删除已存的 OAuth 凭证：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp logout sentry</code></pre>
+
+<h2>超时</h2>
+<p>超时值为正整数毫秒。在 <code>mcp.timeout</code> 下设置默认值；单个服务器的 <code>timeout</code> 对象覆盖同名默认值。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}</code></pre>
+<table>
+<thead>
+<tr><th>超时项</th><th>默认值</th><th>作用对象</th></tr>
+</thead>
+<tbody>
+<tr><td><code>startup</code></td><td>30 秒</td><td>传输连接和服务器初始化。</td></tr>
+<tr><td><code>catalog</code></td><td>30 秒</td><td>列出工具、提示词、资源和资源模板。</td></tr>
+<tr><td><code>execution</code></td><td>12 小时</td><td>工具调用、提示词获取和资源读取。</td></tr>
+</tbody>
+</table>
+
+<h2>协议版本</h2>
+<p>OpenCode 默认用经典的 MCP <code>initialize</code> 握手打开每个服务器。把某个服务器的 <code>protocol</code> 设置好，就能与基于 2026-07-28 修订版构建的服务器对话：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "modern": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "auto",
+      },
+    },
+  },
+}</code></pre>
+<table>
+<thead>
+<tr><th>取值</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>legacy</code></td><td>默认。发送 <code>initialize</code>，支持到 2025-11-25 为止的协议修订版。</td></tr>
+<tr><td><code>auto</code></td><td>用 <code>server/discover</code> 探测 2026-07-28 修订版，服务器不支持时退回 <code>legacy</code>。</td></tr>
+<tr><td><code>2026-07-28</code></td><td>要求 2026-07-28 修订版。对旧服务器连接会失败。</td></tr>
+</tbody>
+</table>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>对 <code>legacy</code> 的本地服务器做 <code>auto</code> 探测会多启动一个短命进程；如果服务器忽略未知请求，探测还可能一直等到启动超时。所以 <code>auto</code> 只给确实需要它的服务器用，不要全局铺开。</p>
+</aside>
+
+<h2>共享连接</h2>
+<p>一个 OpenCode 服务器可以同时打开很多目录，而每个目录默认都会连一遍它自己的每个 MCP 服务器。把 <code>pool</code> 设为 <code>true</code>，可以让配置相同服务器的目录们共享一条连接和一份工具列表：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cloudflare": {
+        "type": "remote",
+        "url": "https://mcp.cloudflare.com/mcp",
+        "pool": true,
+      },
+    },
+  },
+}</code></pre>
+<ul>
+<li>只有 2026-07-28 修订版上的连接才会共享。设置了 <code>pool</code> 后，未写 <code>protocol</code> 意味着 <code>auto</code>。以旧修订版应答的服务器、或被设为 <code>legacy</code> 的服务器，仍然每个目录一条连接。</li>
+<li>目录间共享连接要求所有会影响连接的东西都一致：远程服务器的 URL、请求头、OAuth 设置和登录账号；本地服务器的命令、工作目录和环境变量。<code>timeout</code> 和 <code>protocol</code> 也必须一致。服务器名称不必相同，但登录信息按名称存储，所以 OAuth 服务器只在同名下才会共享。</li>
+<li>本地服务器只在本机目录之间共享，不跨工作区。想跨项目共享需要固定 <code>cwd</code>（如 <code>"~"</code>）；没有固定的话它会在每个项目目录里各跑一份，OpenCode 会记录一条警告。</li>
+<li>共享连接没有 roots（根目录限定）。工具请求输入时，请求会出现在调用它的那个目录里。</li>
+<li>最后一个使用它的目录关闭或断开服务器时，连接随之关闭。</li>
+</ul>
+
+<h2>工具命名</h2>
+<p>OpenCode 把工具命名为 <code>&lt;server&gt;_&lt;tool&gt;</code>，字母、数字、<code>_</code>、<code>-</code> 以外的字符一律替换成 <code>_</code>：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id</code></pre>
+<p>MCP 提示词变成名为 <code>&lt;server&gt;:&lt;prompt&gt;</code> 的命令，做同样的规范化。例如：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/context_7:find_docs</code></pre>
+<p>命令文本按顺序填入提示词的参数。用空格分隔，含空格的值加引号：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/context_7:find_docs react "server components"</code></pre>
+<p>选服务器名称时挑短的，并确保规范化后仍然唯一。在默认的 Code Mode 下，工具按规范化后的服务器名分组：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>tools.context_7.resolve_library_id(...)</code></pre>
+
+<h2>权限</h2>
+<p>Code Mode 是默认方式。当服务器的工具必须留在提供商的原生工具列表里时，把 <code>codemode</code> 设为 <code>false</code>：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}</code></pre>
+<p>用权限动作可以在不断开服务器的情况下隐藏或拒绝工具。匹配规范化后的 <code>&lt;server&gt;_&lt;tool&gt;</code> 名称：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}</code></pre>
+
+<h2>资源</h2>
+<p>智能体通过两个内置工具读取 MCP 资源：<code>list_mcp_resources</code> 和 <code>read_mcp_resource</code>。用这些权限动作控制它们：</p>
+<table>
+<thead>
+<tr><th>动作</th><th>资源</th></tr>
+</thead>
+<tbody>
+<tr><td><code>opencode_list_mcp_resources</code></td><td>服务器名称。</td></tr>
+<tr><td><code>opencode_read_mcp_resource</code></td><td><code>&lt;server&gt;:&lt;uri&gt;</code></td></tr>
+</tbody>
+</table>
+<p>比如，允许从 <code>docs</code> 服务器读取所有资源：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "permissions": [
+    {
+      "action": "opencode_read_mcp_resource",
+      "resource": "docs:*",
+      "effect": "allow",
+    },
+  ],
+}</code></pre>
+
+<h2>服务器指令</h2>
+<p>当服务器在初始化时返回指令（instructions），OpenCode 会把它们加进系统提示词：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>&lt;mcp_instructions&gt;
+  &lt;server name="sentry"&gt;
+    Search for an existing issue before creating a new one.
+  &lt;/server&gt;
+&lt;/mcp_instructions&gt;</code></pre>
+<p>对使用 Code Mode 的服务器，OpenCode 会额外加一行，说明智能体可以在哪里找到该服务器的工具。</p>
+<p>当智能体的权限拒绝了某服务器的所有工具时，该服务器的指令会被省略。当权限拒绝了 <code>execute</code> 时，服务器的工具改为直接列出，指令保留但去掉 Code Mode 那一行。</p>
+
+<h2>输入请求</h2>
+<p>服务器可以在调用过程中通过 MCP elicitation 请求输入。OpenCode 把请求显示为表单；URL 类请求则显示为一个链接：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>sentry is requesting input</code></pre>
+<p>关掉表单即取消请求。</p>
+
+<h2>上下文</h2>
+<p>代表会话发起的调用，OpenCode 会在 <code>CallToolRequest.params._meta["ai.opencode/sessionID"]</code> 里带上会话 ID。这适用于直接工具和 Code Mode，stdio 与 Streamable HTTP 皆可：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}</code></pre>
+<p>这个 ID 是请求元数据，不是工具参数，所以不会出现在模型可见的 schema 里。把它当作一个不透明的关联值：</p>
+<table>
+<thead>
+<tr><th>规则</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td>身份</td><td>它标识的是发起调用的 OpenCode 会话，不是 MCP 传输层会话。</td></tr>
+<tr><td>存在性</td><td>没有会话上下文的调用里它可能不存在。</td></tr>
+<tr><td>安全</td><td>不要单独用它做认证或授权。</td></tr>
+<tr><td>隐私</td><td>远程服务器收到的是原始 ID，可能会记录或保留它。</td></tr>
+</tbody>
+</table>
+
+<h2>管理</h2>
+<p>在任何项目里列出服务器和它们当前的连接状态：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp list</code></pre>
+<p>在 OpenCode 里用 <code>/mcps</code> 查看、连接、断开或认证服务器。用 CLI 添加服务器和管理 OAuth 凭证：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry</code></pre>
+<p>不带名称运行 <code>opencode mcp auth</code>，可以从支持 OAuth 的服务器里挑选：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode mcp auth</code></pre>
+<p>要移除服务器，把它的条目从当初添加它的项目或全局配置里删掉：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "mcp": {
+    "servers": {},
+  },
+}</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>在 <code>/mcps</code> 里断开一个服务器<strong>不会改动配置文件</strong>——那只是本次会话的状态。OAuth 客户端设置、超时、工作目录，以及「保留配置但保持断开」这类持久需求，都要直接编辑配置：</p>
+</aside>
+
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}</code></pre>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

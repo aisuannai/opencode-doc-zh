@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="agents" data-group="配置" data-src="https://opencode.ai/docs/agents/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Agents</h1>
+<p class="lede">智能体（Agent）= 系统提示词 + 模型偏好 + 权限 + 显示信息的打包配置。写一个 Markdown 文件就能创建一个可复用的智能体，比如一个只读的代码审查员。</p>
+
+<p>下面这个例子添加了一个只读的 reviewer 智能体，主智能体可以在代码审查时调用它：</p>
+
+<div class="term-head"><span>.opencode/agents/reviewer.md</span><span>Markdown</span></div>
+<pre><code>---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-5-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.</code></pre>
+
+<p>然后让主智能体使用它：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Use the reviewer subagent to review my current changes.</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把智能体想成公司里的一个「岗位说明书」：上面写清楚这个人（模型）是谁、负责什么（系统提示词）、能不能动某些东西（权限）、用哪台机器干活（模型偏好）。主智能体是「项目经理」，遇到需要专人的活就按岗位说明书把人拉进来干一段，干完汇报，上下文互不污染。</p>
+</aside>
+
+<h2>存放位置</h2>
+<p>Markdown 智能体可以全局保存（对所有项目生效），也可以放在项目内部：</p>
+
+<div class="term-head"><span>text</span><span>两种位置</span></div>
+<pre><code>~/.config/opencode/agents/&lt;name&gt;.md
+.opencode/agents/&lt;name&gt;.md</code></pre>
+
+<p>OpenCode 会从当前目录逐级向上查找项目的 <code>.opencode</code> 目录，一直到项目根。嵌套路径会成为智能体 ID 的一部分：</p>
+
+<div class="term-head"><span>text</span><span>路径 → ID</span></div>
+<pre><code>.opencode/agents/team/reviewer.md  →  team/reviewer</code></pre>
+
+<h2>两种格式</h2>
+
+<h3>Markdown</h3>
+<p>Markdown 格式的 frontmatter 接受与 <code>agents</code> 配置项相同的字段。Markdown 正文部分会成为该智能体的 <code>system</code> 系统提示词：</p>
+
+<div class="term-head"><span>.opencode/agents/explainer.md</span><span>Markdown</span></div>
+<pre><code>---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>V1 版本的 frontmatter 字段已被弃用。仍在使用这些旧字段的文件如何被读取，见 <a href="migrate-v1.html">从 V1 迁移</a> 的「Agent 文件」一节。新写的智能体请直接用 V2 字段。</p>
+</aside>
+
+<h3>JSONC</h3>
+<p>也可以在任意 <a href="config.html">OpenCode 配置文件</a>的 <code>agents</code> 键下定义智能体：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}</code></pre>
+
+<h2>默认智能体</h2>
+<p>设置会话未主动选择时使用的主智能体：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}</code></pre>
+
+<p>指定的默认值必须真实存在、可见，并且支持 primary 用途。否则 OpenCode 会退回使用 <code>build</code>，再不行就用第一个可见且支持 primary 的智能体。修改这个设置不会替换已有会话上保存的智能体。</p>
+
+<h2>模式（mode）</h2>
+<p>根据智能体应该在哪里运行来设置 <code>mode</code>：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>模式</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>primary</code></td><td>作为会话的主智能体运行。新建自定义智能体时这是默认值。</td></tr>
+<tr><td><code>subagent</code></td><td>只能通过 <code>subagent</code> 工具在子会话中运行。</td></tr>
+<tr><td><code>all</code></td><td>既可以当主智能体，也可以当子智能体。</td></tr>
+</tbody>
+</table>
+
+<p>子智能体（subagent）在自己的子会话中以全新上下文运行。它们总是在后台运行：父会话会在子会话空闲时收到一份报告，之后每完成一轮工作都会再收到一次。父智能体的 <code>subagent</code> 权限决定它能启动哪些子智能体；子智能体则使用自己配置的权限。</p>
+
+<div class="term-head"><span>jsonc</span><span>限制可启动的子智能体</span></div>
+<pre><code>{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}</code></pre>
+
+<h2>内置智能体</h2>
+<p>OpenCode 自带以下可见智能体：</p>
+
+<table>
+<thead>
+<tr><th>智能体</th><th>模式</th><th>用途</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Build</strong>（<code>build</code>）</td><td><code>primary</code></td><td>默认的编码智能体。默认允许使用工具和访问工作区之外的资源；读取敏感的环境变量文件时会请求批准。</td></tr>
+<tr><td><strong>Plan</strong>（<code>plan</code>）</td><td><code>primary</code></td><td>只探索和规划，不修改普通项目文件。被要求时可以写 OpenCode 的 plan 文件，shell 命令仍受权限控制。</td></tr>
+<tr><td><strong>General</strong>（<code>general</code>）</td><td><code>subagent</code></td><td>处理调研和多步骤工作，工具访问范围广，但不能再启动更多子智能体。</td></tr>
+<tr><td><strong>Explore</strong>（<code>explore</code>）</td><td><code>subagent</code></td><td>搜索和阅读代码或网页资源，不修改文件。</td></tr>
+</tbody>
+</table>
+
+<p>使用与内置智能体相同的 ID 即可覆盖它：</p>
+
+<div class="term-head"><span>jsonc</span><span>覆盖内置 build</span></div>
+<pre><code>{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}</code></pre>
+
+<p>隐藏的 <code>compaction</code>、<code>title</code> 和 <code>summary</code> 智能体负责维护性工作，不能被直接选中。V2 没有内置的 <code>scout</code> 智能体。</p>
+
+<h2>合并规则</h2>
+<p>智能体定义按配置顺序合并。靠后的标量值替换靠前的值，请求映射（map）按键合并，权限规则则追加：</p>
+
+<div class="term-head"><span>jsonc</span><span>权限是追加的</span></div>
+<pre><code>{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}</code></pre>
+
+<p>全局 <code>permissions</code> 会先于智能体专属规则生效，所以后面的智能体规则可以对其进行细化收窄。</p>
+
+<h2>全部选项</h2>
+
+<h3>description（描述）</h3>
+<p><code>description</code> 说明智能体的用途。子智能体一定要写，因为 OpenCode 会把它展示给负责挑选智能体的模型：</p>
+
+<div class="term-head"><span>yaml</span><span></span></div>
+<pre><code>description: Reviews database migrations for safety</code></pre>
+
+<h3>mode（模式）</h3>
+<p><code>mode</code> 接受 <code>primary</code>、<code>subagent</code> 或 <code>all</code>。新建自定义智能体省略时默认为 <code>primary</code>：</p>
+
+<div class="term-head"><span>yaml</span><span></span></div>
+<pre><code>mode: all</code></pre>
+
+<h3>model（模型）</h3>
+<p><code>model</code> 使用 <code>provider/model</code> 格式，可以加可选的 <code>#variant</code>：</p>
+
+<div class="term-head"><span>yaml</span><span></span></div>
+<pre><code>model: anthropic/claude-sonnet-5-5#high</code></pre>
+
+<p>JSON 配置也接受展开形式：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "variant": "high",
+      },
+    },
+  },
+}</code></pre>
+
+<ul>
+<li>子智能体使用自己配置的模型；未配置时继承父会话的模型。</li>
+<li>会话单独保存自己选定的模型。按 ID 选择主智能体不会改变这个模型。</li>
+</ul>
+
+<h3>system（系统提示词）</h3>
+<p><code>system</code> 设置智能体的系统提示词。非空值会替换该智能体所用的提供商基础提示词：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}</code></pre>
+
+<p>项目指令、skills、references 等其它指令来源仍会附加。在 Markdown 智能体里，把这段文字写在文档正文中，不要写 <code>system</code> frontmatter 字段。</p>
+
+<h3>permissions（权限）</h3>
+<p><code>permissions</code> 是一个按顺序匹配的规则列表：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>字段</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td><code>action</code></td><td>工具或权限动作。支持通配符。</td></tr>
+<tr><td><code>resource</code></td><td>路径、命令、智能体 ID 或该动作匹配的其它值。支持通配符。</td></tr>
+<tr><td><code>effect</code></td><td><code>allow</code>、<code>ask</code> 或 <code>deny</code>。</td></tr>
+</tbody>
+</table>
+
+<p><strong>最后一条匹配的规则胜出</strong>，所以宽泛规则要放在前面，例外放在后面。常见动作包括：</p>
+
+<table>
+<thead>
+<tr><th>动作</th><th>覆盖范围</th></tr>
+</thead>
+<tbody>
+<tr><td><code>shell</code></td><td>shell 命令</td></tr>
+<tr><td><code>edit</code></td><td>编辑、写入、补丁类工具</td></tr>
+<tr><td><code>subagent</code></td><td>子智能体</td></tr>
+<tr><td><code>read</code>、<code>glob</code>、<code>grep</code></td><td>本地探索类工具</td></tr>
+<tr><td><code>webfetch</code>、<code>websearch</code></td><td>网页类工具</td></tr>
+<tr><td><code>skill</code></td><td>Skill 加载</td></tr>
+</tbody>
+</table>
+
+<p>对于 <code>read</code>、<code>edit</code> 和 <code>external_directory</code> 的资源值，OpenCode 会展开 <code>~</code> 和 <code>$HOME</code>：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{ "action": "read", "resource": "~/notes/**", "effect": "allow" }</code></pre>
+
+<p>shell 资源保持原始命令文本，不做这些展开。</p>
+
+<h3>steps（步数上限）</h3>
+<p><code>steps</code> 设置模型步数的最大值（正整数）：</p>
+
+<div class="term-head"><span>yaml</span><span></span></div>
+<pre><code>steps: 8</code></pre>
+
+<p>到最后一步时，OpenCode 会移除工具并要求模型用文字总结。新的用户输入会重置这个额度。</p>
+
+<h3>hidden（隐藏）</h3>
+<p><code>hidden</code> 把智能体从常规列表、交互式发现和子智能体目录中移除：</p>
+
+<div class="term-head"><span>yaml</span><span></span></div>
+<pre><code>hidden: true</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>hidden</code> 控制的是<strong>可见性</strong>，不是安全。想限制智能体能做什么，请用 permissions。</p>
+</aside>
+
+<h3>color（颜色）</h3>
+<p><code>color</code> 用六位十六进制值设置智能体在界面上的颜色：</p>
+
+<div class="term-head"><span>yaml</span><span></span></div>
+<pre><code>color: "#ff6b6b"</code></pre>
+
+<h3>disabled（禁用）</h3>
+<p><code>disabled</code> 在配置加载到该处时移除一个内置或自定义智能体：</p>
+
+<div class="term-head"><span>jsonc</span><span>禁用内置 plan</span></div>
+<pre><code>{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}</code></pre>
+
+<h3>request（请求定制）</h3>
+<p><code>request</code> 接受针对单个智能体的请求头和 JSON body 覆盖：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>V2 会话运行器目前只是<strong>保留</strong>了这些值，还没有把它们随模型请求一起发送。想让请求定制立即生效，请配置在 provider、model 或 model variant 上。</p>
+</aside>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>新的 V2 智能体配置中不要再使用旧的顶层字段，如 <code>temperature</code>、<code>top_p</code>、<code>prompt</code>、<code>permission</code>、<code>tools</code>、<code>disable</code>、<code>maxSteps</code>——这些都是 V1 时代的遗留写法，V2 已经用新的分层结构（<code>request</code>、<code>permissions</code>、<code>steps</code> 等）取代了它们。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

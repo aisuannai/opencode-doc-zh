@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDK · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-sdk" data-group="构建与集成" data-src="https://opencode.ai/docs/build/sdk/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>SDK</h1>
+<p class="lede"><code>@opencode/sdk</code> 把 OpenCode 直接托管在你的应用内部。与<a href="build-client.html">网络客户端</a>不同，它把 OpenCode 服务器组装起来，并在内存中通过其 HTTP 路由器转发 API 调用。它不打开任何 HTTP 监听器，客户端与服务器之间也没有网络跳转。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>客户端（<code>@opencode/client</code>）是「打电话给 OpenCode」，SDK 是「把 OpenCode 装进你的进程里」。SDK 内部仍然跑着一个完整的 OpenCode 服务器，只是 API 调用不经过网卡，而是在内存里直接递进路由器——更快、更可控，也适合无服务器环境。想在 Cloudflare Durable Object 里用，见 <a href="build-sdk-cloudflare.html">Cloudflare SDK</a>。</p>
+</aside>
+
+<h2>安装</h2>
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>bun add @opencode/sdk</code></pre>
+
+<h2>创建宿主（host）</h2>
+<p><code>OpenCode.create()</code> 返回一个显式拥有的宿主。用 <code>await using</code> 来释放它的路由器、Location 服务、fiber 和作用域内的插件注册：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})</code></pre>
+
+<p>当显式资源管理不可用时，显式调用 <code>await opencode.close()</code>。</p>
+
+<p>嵌入式宿主使用与 <code>@opencode/client</code> 相同的 Promise 值、已声明错误、请求选项和 <code>AsyncIterable</code> 流。它暴露完整的生成客户端，并为会话和事件组额外提供 <code>sessions</code> 和 <code>events</code> 便捷别名。</p>
+
+<h2>工作树（Worktrees）</h2>
+<p>工作树操作需要 <code>projectID</code>。<code>create</code> 和 <code>refresh</code> 从项目保存的规范检出（canonical checkout）加载配置和插件。<code>list</code> 只读已保存的清单；<code>remove</code> 会激活规范插件并使用记录的策略，策略不可用时失败：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })</code></pre>
+
+<p>refresh 会用所有可用策略在已知检出根目录间发现工作树。通过<a href="build-plugins-server.html#sec-22">插件的工作树转换</a>注册自定义策略。</p>
+
+<h2>流式事件（Stream events）</h2>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}</code></pre>
+
+<p>通过生成的请求选项传一个 <code>AbortSignal</code>，或者直接结束迭代来取消它的响应体。</p>
+
+<h2>定制（Customize）</h2>
+<p>通过注册插件定制你的 OpenCode 实例。把插件传给 <code>OpenCode.create()</code>，在嵌入式宿主启动时定制 agents、模型、工具和其它行为：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) =&gt; {
+      agents.update("build", (agent) =&gt; {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })</code></pre>
+
+<p>启动后用 <code>await opencode.plugin(plugin)</code> 注册另一个插件。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>SDK 场景下，插件通常和你的应用代码在同一个构建产物里，直接以 <code>Plugin.define(...)</code> 的对象传入即可，不需要 <code>opencode.json</code> 里的 <code>plugins</code> 配置。插件的钩子、转换、工具和完整上下文见<a href="build-plugins-server.html">服务器插件</a>全篇。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

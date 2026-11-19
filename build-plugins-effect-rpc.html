@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effect RPC · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-plugins-effect-rpc" data-group="构建与集成" data-src="https://opencode.ai/docs/build/plugins/effect/rpc/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Effect RPC</h1>
+<p class="lede">Effect 插件可以暴露返回类型化 Effect 和 Stream 的方法与事件。</p>
+
+<p>这是 <a href="build-plugins-rpc.html">插件 RPC</a> 的 Effect 版本：契约定义改用 Effect Schema，实现是 Effect，事件订阅是 Stream。</p>
+
+<h2>定义（Define）</h2>
+<p>用 <code>Rpc.define</code> 加 Effect Schema 定义 RPC：</p>
+<div class="term-head"><span>src/rpc.ts</span><span>TypeScript</span></div>
+<pre><code>import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})</code></pre>
+
+<h3>校验（Validation）</h3>
+<p>Effect Schema 校验值并推断它们的 TypeScript 类型：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>input: Schema.Struct({ query: Schema.String })</code></pre>
+
+<p>JSON Schema 和 Standard Schema 同样受支持。</p>
+
+<h3>输入与输出（Input and output）</h3>
+<p><code>input</code> 用于方法参数，<code>output</code> 用于返回值。没有值时任一都可以省略：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}</code></pre>
+
+<h3>错误（Errors）</h3>
+<p>把预期失败加进 <code>errors</code>。每个键成为错误的 <code>type</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}</code></pre>
+
+<h3>事件（Events）</h3>
+<p>把事件加进顶层的 <code>events</code> 映射。事件数据必须是对象：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}</code></pre>
+
+<h2>实现（Implement）</h2>
+<p>从插件 Effect 里注册实现：</p>
+<div class="term-head"><span>src/index.ts</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =&gt;
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =&gt;
+          findText(query).pipe(
+            Effect.flatMap((text) =&gt;
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})</code></pre>
+
+<p>错误映射会成为每个方法 Effect 的错误类型。用 <code>context.error(...)</code> 创建已声明的错误。</p>
+
+<h2>调用（Call）</h2>
+<p>RPC 注册之后，可以通过 HTTP 或从另一个插件调用它。</p>
+
+<h3>HTTP</h3>
+<p>创建 Effect 客户端，然后创建 RPC 子客户端：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))</code></pre>
+
+<h3>插件（Plugin）</h3>
+<p>另一个 Effect 插件可以从它的上下文创建本地子客户端：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Effect } from "effect"
+
+effect: (ctx) =&gt;
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)</code></pre>
+
+<h3>订阅（Subscribe）</h3>
+<p>RPC 事件是 Stream。按事件名订阅，并在作用域 fiber 里运行该 Stream：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield* acme.events.subscribe("updated").pipe(
+  Stream.runForEach((event) =&gt; Effect.logInfo(event.data.text)),
+  Effect.forkScoped,
+)</code></pre>
+
+<p>订阅是「活性」的（live only），Stream 消费停止时即关闭。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>定义契约（<code>src/rpc.ts</code>）时别忘了发布配置：其它插件和客户端要按 <code>opencode-acme-plugin/rpc</code> 这样的子路径导入它，你的 <code>package.json</code> <code>exports</code> 里必须有 <code>"./rpc": "./src/rpc.ts"</code> 这一条，否则调用方类型解析不到。</p>
+</aside>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>对比一下两套 RPC 的订阅语义：<a href="build-plugins-rpc.html">Promise 版</a>用 <code>events.on(...)</code> 回调加取消函数，Effect 版直接 <code>forkScoped</code> 一个 Stream 消费——fiber 结束订阅就结束，正好借作用域自动清理。定义契约部分（<code>Rpc.define</code>）两边其实是同一个 API，只是 schema 写法不同：JSON Schema ↔ Effect Schema。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>客户端 (JS) · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-client" data-group="构建与集成" data-src="https://opencode.ai/docs/build/client/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>客户端 (JS)</h1>
+<p class="lede"><code>@opencode/client</code> 是 OpenCode HTTP API 的 TypeScript 客户端。当你的应用通过网络连接一台 OpenCode 服务器时用它。它的原生类型和方法与 <a href="api.html">API 参考</a>从同一份契约生成。插件 RPC 类型则来自导入的 RPC 定义。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>TUI 和桌面应用内部用的就是这同一个客户端。也就是说：你用 <code>@opencode/client</code> 能做到的事，和官方界面能做到的事是同一集合——创建会话、发提示词、订阅事件、调用插件 RPC。把它想成「OpenCode 服务器的一副官方手套」，你套上它就能从任何 JS 应用里操作 OpenCode。</p>
+</aside>
+
+<h2>安装</h2>
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>bun add @opencode/client</code></pre>
+
+<h2>创建客户端</h2>
+<p>用服务器 URL 创建客户端，然后调用按 API 资源分组的方法：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})</code></pre>
+
+<h2>请求头与请求（Headers and requests）</h2>
+<p>把默认的认证或应用请求头通过 <code>headers</code> 传给 <code>OpenCode.make</code>。也可以提供自定义的 <code>fetch</code> 实现。每个操作都接受请求选项作为最后一个参数，用于 <code>AbortSignal</code> 或单次请求的请求头。事件订阅是例外：它们只接受订阅方本地的取消，并使用基础客户端的请求头：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})</code></pre>
+
+<h2>流式事件（Stream events）</h2>
+<p>流式端点返回异步可迭代对象：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}</code></pre>
+
+<p>原生和 RPC 事件订阅者在每个客户端上共享一条惰性连接。创建客户端、句柄或可迭代对象都不会打开事件连接；开始消费时才打开。中断迭代或中止一个订阅者只会结束那个迭代器。最后一个订阅者离开时关闭连接。共享源会等待活跃订阅者逐个接收事件；消费者要做慢活之前请先自己缓冲。</p>
+
+<p>订阅是「活性」的（live-only）：没有重放，也没有自动重连。源故障会结束当前订阅；恢复后请重新订阅。后到的原生订阅者会收到当前的 <code>server.connected</code> 标记，而不是过去的业务事件。</p>
+
+<p>传 <code>types</code> 可以只接收部分事件类型。事件类型随之收窄，且 <code>server.connected</code> 总会到达，这样被过滤的订阅者仍然知道何时该重新同步。过滤发生在共享连接上、客户端内部：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type 是 "config.updated" | "server.connected"
+}</code></pre>
+
+<h2>插件 RPC（Plugin RPC）</h2>
+<p>导入插件的共享契约并传给 <code>client.rpc</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) =&gt; {
+  console.log(event.type, event.location.directory, event.data.text)
+})</code></pre>
+
+<p>第二个可选的方法参数持有 <code>location</code>、<code>signal</code> 和 <code>headers</code>，与插件定义的输入分开。省略 location 时遵循原生请求的默认值：先是基础 location 请求头，然后是服务器的工作目录。构造子客户端时不会选中任何 location。</p>
+
+<p>方法从定义推断参数和结果类型。Schema 解析属于契约边界的事：调用方发送可接受的输入表示，处理器收到的是解析后的值。Promise 客户端接受 Standard Schema 或纯 JSON Schema 定义，<strong>不</strong>在本地运行 schema 解析器：服务器返回的是已经解析并转换过的输出。Effect Schema 定义需要 Effect 客户端（见 <a href="build-client-effect.html">Effect 客户端</a>）。</p>
+
+<p>已声明的方法错误像其它 Promise 客户端端点的错误一样 reject，捕获到的错误不带类型。通用 HTTP RPC 错误包装被类型化子客户端剥掉了。保留的 <code>rpc.*</code> 框架失败仍是普通 RPC 失败，而不相关的认证、传输和协议错误保持它们正常的客户端表示。</p>
+
+<p>RPC 订阅使用本地名，并接收该 RPC 来自<strong>所有位置</strong>的事件。检查必需的 <code>event.location</code> 来过滤它们。<code>events.subscribe</code> 与原生异步可迭代 API 一致：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}</code></pre>
+
+<p><code>events.on</code> 是同一个源之上的便捷包装。它返回取消订阅函数；异步回调按顺序依次 await。回调或源故障会被记录并结束该监听器。原生和类型化订阅收到同样的、正常的 <code>rpc.&lt;rpcID&gt;.&lt;event&gt;</code> 信封，事件数据是直接的对象。活性订阅不重放错过的事件。</p>
+
+<p>前提是服务器插件已被配置并实现了该 RPC；导入定义并不等于注册它。定义与注册 API 见 <a href="build-plugins-rpc.html">插件 RPC</a>。任何 HTTP 客户端也可以直接调用通用的 <code>POST /api/rpc/{rpcID}/{method}</code> 路由，body 为 <code>{ "input": ... }</code>，返回 <code>{ "output": ... }</code>。省略的 input/output 字段表示没有值。</p>
+
+<h2>本地后台服务（Local background service）</h2>
+<p>客户端的主入口是浏览器兼容的，不包含本地进程管理。在 Node 应用里，从 <code>@opencode/client/service</code> 导入原生的 Promise 服务 API：</p>
+
+<ul>
+<li><code>Service.discover()</code> 返回一个健康的已注册端点，不启动进程。</li>
+<li><code>Service.ensure()</code> 返回一个兼容的服务，需要时启动一个。</li>
+<li><code>Service.stop()</code> 停止确切的那个已注册服务实例。</li>
+<li><code>Service.headers(endpoint)</code> 为客户端生成认证请求头。</li>
+</ul>
+
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()</code></pre>
+
+<p><code>Service.ensure()</code> 接受可选的注册文件、版本、服务命令和 <code>onStart</code> 回调。<code>version</code> 接受精确值或兼容性谓词：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) =&gt; version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})</code></pre>
+
+<p>省略这些选项时，使用标准注册路径和 <code>opencode serve --service</code> 命令。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>选型速查：已有 OpenCode 在跑（比如用户开着 TUI/桌面）→ 直接 <code>OpenCode.make({ baseUrl })</code> 连上去；你的应用要自己拉起一个本地 OpenCode → 用 <code>Service.ensure()</code>，它发现可复用的就复用，没有才启动；全在浏览器里 → 主入口天然兼容。服务器端超时统一用 <code>AbortSignal.timeout()</code> 控制即可，事件订阅的取消要靠中断迭代本身。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

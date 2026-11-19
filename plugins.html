@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="plugins" data-group="配置" data-src="https://opencode.ai/docs/plugins/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>插件</h1>
+<p class="lede">插件（Plugin）可以给 OpenCode 加工具、钩子、集成、命令和智能体。已发布的 npm 包、带版本号的包、scoped 包或本地插件目录，都可以加进 <code>opencode.json(c)</code>。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>如果说 MCP 是「外接工具的 USB 标准」，插件就更像「给智能体刷固件」：它能在 OpenCode 内部流程的各个钩子点（hook）上插手——比如「每次写完文件自动 lint」「聊天前先注入一段提示」「给桌面端加一个新面板」。MCP 解决的是「让 AI 多几只手」，插件解决的是「改变 AI 的行为习惯」。</p>
+</aside>
+
+<h2>配置</h2>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}</code></pre>
+<p>相对路径从<strong>包含该条目的配置文件</strong>所在目录解析。</p>
+<p>配置里的本地路径必须是<strong>目录</strong>；指向单个文件的路径会被跳过。OpenCode 如何在一个目录里找到各个部分，见<a href="build-plugins.html">插件总览</a>的加载机制说明。</p>
+<p>来自各适用配置文件的插件数组按「从低到高」的优先级<strong>依次叠加应用</strong>，而不是互相替换：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc</code></pre>
+
+<h2>发现机制</h2>
+<p>除了配置，OpenCode 还会自动从每个被发现的 <code>.opencode/plugins/</code> 目录里，加载直接的 <code>.ts</code> 和 <code>.js</code> 文件，以及紧邻的插件包目录：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/</code></pre>
+<p>全局插件使用相同的发现布局，位置在 OpenCode 配置目录下：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.config/opencode/plugins/</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>与项目根目录 <code>opencode.json(c)</code> 并排的 <code>plugins/</code> 目录<strong>不会</strong>被自动发现。要么在配置里显式写出这些插件目录，要么把它们挪到 <code>.opencode/</code> 下面：</p>
+</aside>
+
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "plugins": ["./plugins/local"]
+}</code></pre>
+
+<h2>启用与禁用</h2>
+<p>插件条目按顺序处理。在 ID 或通配符前加 <code>-</code> 表示禁用；<code>*</code> 匹配所有插件；<code>.*</code> 匹配 ID 前缀。后面的 ID 会重新启用插件。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}</code></pre>
+<p>要关掉「新 fork 加提示公告」这个行为，在 <code>plugins</code> 里加上 <code>"-opencode.fork-notice"</code>。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>有两个内置插件<strong>无视禁用指令</strong>，这样仓库自身就无法关掉<a href="policies.html">策略</a>（policy）强制：<code>opencode.config.policy</code> 和 <code>opencode.provider.opencode</code>（后者是交付组织策略的 Console 连接）。这是刻意设计——企业策略如果允许被项目里的配置文件一改就绕过，那就形同虚设。</p>
+</aside>
+
+<h2>管理</h2>
+<p>用 CLI 安装、列出、检查、更新或删除全局包插件：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0</code></pre>
+<p><code>plugin check</code> 检查 server、仅 GUI、仅 TUI 这三类包插件的更新。<code>plugin update</code> 更新所有过期的包；传入已配置的包目标则只检查或更新该包。本地插件和锁定了精确版本的包会被跳过。</p>
+<p>包安装接受带版本、tag 或范围的 npm 名称，以及与 npm 兼容的 Git 包规格。Git 仓库可以用托管平台简写、HTTPS 或 SSH，包括用你现有 Git 凭证可访问的私有仓库：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'</code></pre>
+<p>支持分支、tag、完整 commit 哈希，以及 npm 的 <code>::path:</code> 仓库子目录选择器。本地路径直接写进配置；<code>plugin add</code> 不接受 tarball 和 npm alias 形式的目标。</p>
+
+<h2>热重载</h2>
+<p>被监听的配置目录下的改动会自动重载。服务器启动时立即加载已缓存的包插件，在后台安装缺失的包，并对未锁定版本的 npm 和 Git 插件检查更新（不改动已安装的包）。精确的 npm 版本和完整 Git commit 哈希保持锁定。未被监听的本地依赖有改动时，可能仍需重启 OpenCode：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>touch .opencode/plugins/concise/index.ts
+opencode service restart</code></pre>
+
+<h2>桌面端</h2>
+<p>导出 <code>./gui-experimental</code> 的插件还能给 OpenCode Desktop 添加面板、命令或设置。应用从它运行的服务器加载插件，所以想在每个窗口里都用某个插件，就把它配进全局 <code>opencode.json(c)</code>：</p>
+<div class="term-head"><span>~/.config/opencode/opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "plugins": ["opencode-acme-plugin"],
+}</code></pre>
+<p><strong>Settings &gt; Extensions &gt; Plugins</strong> 在选中应用自带服务器时会列出它们。某个插件的开关只关闭它的桌面 UI，<strong>Reload</strong> 可以在失败后重新加载。要整个关掉插件，在 <code>plugins</code> 里加 <code>-</code> 和它的 ID，例如 <code>"-acme"</code>。</p>
+
+<h2>终端端</h2>
+<p>仅 TUI 的插件单独配置，且在连接远程服务器时依然生效：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "plugins": ["opencode-acme-cli"]
+}</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>想自己写一个插件？<a href="build-plugins.html">构建与集成 · 插件总览</a>会教你创建能给 OpenCode 添加工具、钩子、集成、命令、智能体等行为的插件。想通过插件扩展 TUI 本身，见 <a href="cli-plugins.html">TUI 插件</a>。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

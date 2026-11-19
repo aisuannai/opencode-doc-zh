@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSO · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-sso" data-group="Console" data-src="https://opencode.ai/docs/console/sso/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>SSO</h1>
+<p class="lede">单点登录（Single Sign-On，SSO）让工作区成员登录时统一走你们公司的身份提供商（Identity Provider，IdP）。所有者在 <strong>Settings › Security</strong> 里配置，每个工作区都自带这项功能。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>没有 SSO 时，每个员工要为 OpenCode 单独记一套账号密码；有了 SSO，他们用公司已有的账号体系（Okta、Entra ID 等）一键登录，密码策略、两步验证、离职停用全都沿用公司现成的那套。对 IT 部门来说，这就是「把 OpenCode 纳入统一的门禁系统」，而不是多看管一扇散养的侧门。</p>
+</aside>
+
+<table>
+<thead><tr><th>协议</th><th>支持的提供商</th></tr></thead>
+<tbody>
+<tr><td>OpenID Connect</td><td>Google Workspace、Microsoft Entra ID、Okta、Auth0、Ping Identity，或任何 OIDC 提供商</td></tr>
+<tr><td>SAML 2.0</td><td>Google Workspace、Microsoft Entra ID、Okta，或任何 SAML 提供商</td></tr>
+</tbody>
+</table>
+<p>每个工作区只能有一个 SSO 连接。</p>
+
+<h2>配置 OIDC</h2>
+<ol>
+<li>打开 <strong>Settings › Security</strong>，点击 <strong>Configure SSO</strong>，选择 <strong>OpenID Connect</strong> 和你的提供商。</li>
+<li>按页面显示的步骤在你的提供商处创建一个应用，作用域（scopes）为 <code>openid</code>、<code>email</code>、<code>profile</code>。</li>
+<li>填写 <strong>Issuer URL</strong>（或你的租户/域名），加上 <strong>Client ID</strong>、<strong>Client Secret</strong> 和一个<strong>显示名称</strong>，然后点击 <strong>Save</strong>。</li>
+<li>把连接页面里的 <strong>Callback URL</strong> 复制到你的提供商的允许重定向 URI 列表中。</li>
+</ol>
+<div class="term-head"><span>text</span><span>Callback URL</span></div>
+<pre><code>https://opencode.ai/console/auth/sso/ssoconn_.../callback</code></pre>
+<p>保存时 Console 会检查 issuer 是否可达。连接保存成功后，SSO 立即生效。</p>
+
+<h2>配置 SAML</h2>
+<ol>
+<li>打开 <strong>Settings › Security</strong>，点击 <strong>Configure SSO</strong>，选择 <strong>SAML 2.0</strong> 和你的提供商。</li>
+<li>把 <strong>ACS URL</strong> 和 <strong>SP Entity ID</strong> 填入你的提供商。自定义提供商也可以改用 <strong>SP Metadata URL</strong>，或下载 XML。</li>
+<li>通过 URL、上传 XML 或粘贴的方式添加你提供商的元数据（metadata）。也可以手工填写 <strong>IdP Entity ID</strong>、<strong>IdP SSO URL</strong> 和 <strong>IdP Certificate</strong>。</li>
+<li>检查各项详情，点击 <strong>Activate SSO</strong>。</li>
+</ol>
+<div class="term-head"><span>text</span><span>SAML 配置值</span></div>
+<pre><code>ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata</code></pre>
+<p>你的提供商必须对 response 或 assertion 签名，并把用户邮箱作为 <code>email</code> 属性或 NameID 发送。</p>
+
+<h2>验证邮箱域名</h2>
+<p>用已验证域名下的邮箱登录<a href="https://opencode.ai/console" target="_blank" rel="noopener">控制台</a>的人，会被引导到你们的身份提供商。SSO 生效后，在 <strong>Email domains</strong> 下点击 <strong>Add domain</strong>，输入你的域名，并发布页面上显示的 TXT 记录：</p>
+<div class="term-head"><span>text</span><span>DNS 记录</span></div>
+<pre><code>Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...</code></pre>
+<p>记录发布后点击 <strong>Verify Domain</strong>。DNS 变更的传播可能需要一段时间。每个域名只能属于一个工作区。</p>
+
+<h2>SSO 强制执行</h2>
+<p>工作区启用 SSO 后，管理员和成员必须通过 SSO 登录才能打开工作区，Console 会自动把他们重定向过去。用 <code>/connect</code> 连接 OpenCode 同样遵守这条规则。</p>
+<p>所有者仍可以不走 SSO 登录——这样即使提供商配置出错，也不会把工作区的设置整个锁死。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「Owner 可绕过 SSO」是典型的防呆后门：万一 IdP 那边改了证书、域名过期或配置手滑，普通成员全被挡在门外，但至少 Owner 还能进来把 SSO 关掉或修好。这也是为什么 Owner 账号建议绑定一个不依赖公司域名的个人邮箱并妥善保管。</p>
+</aside>
+
+<h2>自动加入（Automatic membership）</h2>
+<p>已验证域名下的人第一次通过 SSO 登录时，会以 <strong>Member</strong> 身份加入工作区。以下情况不会自动加入：</p>
+<ul>
+<li>他有一条待处理邀请。此时会改用那份邀请处理。</li>
+<li>工作区启用了<a href="console-scim.html">目录同步（directory sync）</a>，成员身份由它决定。</li>
+<li>工作区有 <a href="console-go.html">Go</a> 订阅。</li>
+</ul>
+<p>发给 SSO 工作区的邀请，受邀者打开链接时会被引导到你们的身份提供商。</p>
+
+<h2>已有账号</h2>
+<p>如果某人已经用同一个邮箱注册过 Console 账号，他会在 SSO 流程中再次登录，并通过 <strong>Link account</strong> 确认关联。邀请流程不会跳过这一步确认。在已验证域名的工作区上由 SCIM 供应的账号仍可以自动关联。</p>
+
+<h2>编辑或删除</h2>
+<p>点击连接上的 <strong>Edit</strong> 可以修改详情。把密钥（secret）或证书留空即表示保留当前值。要在 OIDC 和 SAML 之间切换，需删除现有连接后重新创建。</p>
+<p>在 <strong>⋯ › Delete...</strong> 中删除连接。成员会退回到他们其他的登录方式，目录同步随之停止（其 token 被吊销）。邮箱域名的验证记录会保留。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>删除 SSO 连接不只是「关个开关」：如果工作区同时开了<a href="console-scim.html">目录同步</a>，同步会立刻停止且 token 被吊销，之后成员名单只能手动管理。切换 OIDC↔SAML 也要删除重建，过程中的时间窗内成员可能暂时进不了工作区，建议在低峰期操作。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

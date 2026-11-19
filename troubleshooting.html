@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>故障排查 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="troubleshooting" data-group="开始" data-src="https://opencode.ai/docs/troubleshooting/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>故障排查</h1>
+<p class="lede">OpenCode 采用客户端-服务器架构：后台服务器掌管会话、插件、权限等应用状态。排查问题的第一步，是判断问题出在客户端、共享服务器，还是某个具体项目上。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>你可以让 OpenCode 自己排查自己。把问题描述给它，让它读这一页并按步骤操作——它能检查自己的服务和日志，帮你定位问题。这就像车坏了不用光猜，直接让车载诊断仪自己跑一遍。</p>
+</aside>
+
+<h2>检查后台服务</h2>
+<p>查看当前服务器信息：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service status</code></pre>
+<p>验证它的 API 是否健康：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode api get /api/info</code></pre>
+<p>如果服务卡住或不健康，重启它：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service restart</code></pre>
+<p>也可以显式停止和启动：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service stop
+opencode service start</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>OpenCode 通常会自动发现或启动共享后台服务，service 命令只在诊断其生命周期时才需要。日常「重启大法」一条 <code>opencode service restart</code> 就够。</p>
+</aside>
+
+<h2>放行浏览器来源</h2>
+<p>如果另一个来源（origin）的浏览器客户端因 CORS 连不上，把该客户端的来源加进服务配置：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set cors http://192.168.1.10:3001
+opencode service get cors</code></pre>
+<p>使用精确的 HTTP 或 HTTPS 来源（必要时含端口），不带路径或尾斜杠。要放行多个来源，把逗号分隔的列表作为一个参数传入；每个来源两侧的空白会被裁掉：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set cors "http://192.168.1.10:3001, https://app.example.com"</code></pre>
+<p><code>service get cors</code> 输出一个 JSON 数组。移除已配置的列表用：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service unset cors</code></pre>
+<p>设置或取消服务配置会停止后台服务；下次启动时读取新配置，可用 <code>opencode service start</code> 显式启动。</p>
+<p>对前台服务器，每个额外放行的来源重复一次 <code>--cors</code>：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com</code></pre>
+<p>使用 <code>serve --service</code> 时，传入的 <code>--cors</code> 标志只为该进程覆盖持久化的列表；不带这些标志，服务模式使用持久化列表。CORS 不改变监听地址，也不绕过服务器认证。</p>
+
+<h2>调用 API 检查</h2>
+<p><code>api</code> 命令使用本地服务发现和认证流程。它接受 HTTP 方法 + 路径，或 OpenAPI 操作 ID。</p>
+<p>所有端点和操作 ID 见 <a href="api.html">API 参考</a>。</p>
+<p>用 <code>--data</code> / <code>-d</code> 传 JSON 请求体，用 <code>--header</code> / <code>-H</code> 加请求头。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>当没有兼容且健康的服务可用时，运行 <code>opencode api</code> 可能会<strong>启动</strong>后台服务。</p>
+</aside>
+
+<h2>读日志</h2>
+<p>已安装版本的日志写在：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.local/share/opencode/log/opencode.log</code></pre>
+<p>复现问题的同时跟踪日志：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>tail -f ~/.local/share/opencode/log/opencode.log</code></pre>
+<p>每行日志带进程 <code>run</code> ID 和 <code>role</code> 字段。会话、提供商、插件、权限和工具活动用 <code>role=server</code> 过滤：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log</code></pre>
+
+<h2>抓取堆快照</h2>
+<p>在任意平台上给运行中的后台服务器写一份内存（堆）快照：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode debug heap-dump</code></pre>
+<p>该命令会等到快照写完，然后打印路径：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/home/me/.local/share/opencode/log/heap-48213-2026-10-23T013012345Z.heapsnapshot</code></pre>
+<p>用 <code>--directory</code> 写到别处；目录不存在时服务器会创建：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode debug heap-dump --directory ./snapshots</code></pre>
+<ul>
+<li>它只使用<strong>已在运行</strong>的服务器，绝不会启动、替换或重启服务器。</li>
+<li>用 <code>--server &lt;url&gt;</code> 可以抓你自己用 <code>opencode serve</code> 启动的服务器；它有密码时设置 <code>OPENCODE_PASSWORD</code>。此时 <code>--directory</code> 是服务器所在机器上的路径。</li>
+<li>在 Chrome DevTools 的 Memory 面板里打开该文件。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>写快照期间服务器会暂停，内存占用可能短暂升高。快照里可能包含<strong>提示词、文件内容和凭证</strong>，不要公开发布。</p>
+</aside>
+
+<h3>桌面应用里</h3>
+<p>在命令面板里运行 <strong>Capture heap snapshots</strong>。它会在你的「下载」文件夹里写一个目录，包含应用各部分的快照，外加一份「快照看不到的内存」的分解：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>opencode-heap-2026-10-23T013012345Z/
+  memory.json                  where the memory is, per process, in MiB: start here
+  memory-infra.json            Chromium's memory dump trace; open it in https://ui.perfetto.dev
+  heap-48213-….heapsnapshot    the desktop's own server
+  window-1-48390.heapsnapshot  one per app window
+  main-48102.heapsnapshot      the desktop main process
+  gpu.json                     the GPU and driver
+  manifest.json                processes, PIDs, and memory before and after; written last</code></pre>
+<ul>
+<li>堆快照只包含 JavaScript 对象和页面。图片、布局、合成器层和 GPU 内存在 <code>memory.json</code> 和 <code>memory-infra.json</code> 里。</li>
+<li>远程服务器不会被抓取。在那台机器上用 <code>opencode debug heap-dump</code>。</li>
+<li>服务器把快照直接写进文件夹，没有大规模的移动或复制。</li>
+<li>浏览器标签页不包含在内，因为它们的快照会包含你访问过的页面内容。</li>
+</ul>
+
+<h2>抓取 CPU 与内存剖析</h2>
+<p>在 macOS 和 Linux 上，可以给运行中的 OpenCode 进程发信号来采集诊断数据。先从健康端点拿到后台服务器的 PID：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode api get /api/info</code></pre>
+<p>用响应里的 <code>pid</code> 发以下信号之一：</p>
+<ul>
+<li><code>SIGPROF</code> 抓一份 10 秒的 CPU 剖析：
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>kill -SIGPROF &lt;pid&gt;</code></pre>
+<p>结果写入日志目录，文件名为 <code>cpu-&lt;pid&gt;-&lt;timestamp&gt;.cpuprofile</code>。</p></li>
+<li><code>SIGUSR1</code> 抓一份内存（堆）快照：
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>kill -SIGUSR1 &lt;pid&gt;</code></pre>
+<p>结果写入日志目录，文件名为 <code>heap-&lt;pid&gt;-&lt;timestamp&gt;.heapsnapshot</code>。</p></li>
+</ul>
+<p>等 <code>opencode.log</code> 里出现 <code>CPU profile written</code> 或 <code>heap snapshot written</code> 再打开文件；对应日志条目里有完整路径。两种文件都能在 Chrome DevTools 里查看。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>Windows 上没有信号触发的剖析。堆快照请改用 <code>opencode debug heap-dump</code>。写堆快照可能暂停进程并临时增加内存占用。</p>
+</aside>
+
+<h2>服务文件</h2>
+<p>共享服务器在以下位置注册自己：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.local/state/opencode/service.json</code></pre>
+<p>它的私有服务配置单独存放在：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.config/opencode/service.json</code></pre>
+<p>数据库通常位于：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.local/share/opencode/opencode.db</code></pre>
+<p><code>OPENCODE_DB</code> 可以覆盖数据库位置。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>排查期间<strong>不要删除或编辑</strong>服务文件和数据库。管理守护进程用 service 命令；要用外部工具查看持久化数据前，先备份。</p>
+</aside>
+
+<h2>反馈问题</h2>
+<p>报告可复现问题时请附上：</p>
+<ul>
+<li><code>opencode --version</code> 的输出</li>
+<li><code>opencode service status</code> 的输出</li>
+<li>复现该问题的最小步骤序列</li>
+<li>问题影响的是共享服务、某个客户端，还是某一个项目</li>
+<li>相关日志行，包括其中的 <code>run</code> 和 <code>role</code> 字段</li>
+</ul>
+<p>分享日志之前，去掉 API key、授权头、提示词、文件内容和其它敏感数据。</p>
+<p>可复现的问题提交到 <a href="https://github.com/anomalyco/opencode/issues" target="_blank" rel="noopener">GitHub Issues</a>。一份好的 issue 报告 = 版本号 + 服务状态 + 最小复现步骤 + 影响范围 + 相关日志，信息越精确，问题越可能被快速修掉。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

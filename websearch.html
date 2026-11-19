@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网页搜索 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="websearch" data-group="配置" data-src="https://opencode.ai/docs/websearch/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>网页搜索</h1>
+<p class="lede">问 OpenCode 一个需要最新信息的问题，它可以搜索网页、阅读结果，并在回答里附上来源链接。搜索由 Exa、Tavily 等第三方服务商提供，需要一个 API 密钥。</p>
+
+<p>直接提出需求即可：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Find the latest Bun release and summarize the changes.</code></pre>
+
+<p>第一次搜索时，OpenCode 会请你允许网页搜索并选择一个服务商（provider）。之后它会记住你的选择，供后续会话使用。</p>
+
+<h2>服务商（Providers）</h2>
+<p>OpenCode 内置五个搜索服务商：</p>
+
+<table>
+<thead>
+<tr><th>服务商</th><th>ID</th><th>环境变量</th></tr>
+</thead>
+<tbody>
+<tr><td>Exa</td><td><code>exa</code></td><td><code>EXA_API_KEY</code></td></tr>
+<tr><td>Firecrawl</td><td><code>firecrawl</code></td><td><code>FIRECRAWL_API_KEY</code></td></tr>
+<tr><td>Parallel</td><td><code>parallel</code></td><td><code>PARALLEL_API_KEY</code></td></tr>
+<tr><td>Tavily</td><td><code>tavily</code></td><td><code>TAVILY_API_KEY</code></td></tr>
+<tr><td>TinyFish</td><td><code>tinyfish</code></td><td><code>TINYFISH_API_KEY</code>（可选）</td></tr>
+</tbody>
+</table>
+
+<p>两种接入方式任选：在 TUI 里用 <code>/connect</code> 连接账号，或在启动 OpenCode 之前设置对应的环境变量：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ TAVILY_API_KEY=your-key opencode</code></pre>
+
+<h2>选择服务商（Selection）</h2>
+<p>在 <code>opencode.jsonc</code> 里指定服务商，可以跳过首次的选择提示：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}</code></pre>
+
+<p>设为 <code>"random"</code> 可以自动在可用服务商中选择。每个会话会一直用自己选定的服务商，直到该服务商被限流：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}</code></pre>
+
+<h2>限流与重试（Limits）</h2>
+<p>当某个服务商返回 HTTP 429 时，random 模式会换另一个可用的服务商重试这次搜索。被限流的服务商进入冷却，等待自己的 <code>Retry-After</code> 时长；如果响应里没有有效的时长，就等 60 秒：</p>
+
+<div class="term-head"><span>text</span><span>流程示意</span></div>
+<pre><code>Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider</code></pre>
+
+<p>如果所有服务商都在冷却中，搜索会立即失败。把会话迁移走或重启它的服务器，会清掉会话记住的服务商；冷却状态由<strong>同一工作区</strong>中的所有会话共享。</p>
+
+<h2>权限（Permissions）</h2>
+<p>网页搜索使用 <code>websearch</code> 权限动作、搜索查询词作为资源。对未被显式允许的搜索，先询问再执行：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}</code></pre>
+
+<p>规则顺序和匹配规则见 <a href="permissions.html">权限</a>一章。</p>
+
+<h2>禁用（Disable）</h2>
+<p>把 <code>websearch</code> 设为 <code>false</code>，可以从模型请求中移除网页搜索工具：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>模型本身的训练数据有「截止日期」，问它「最新版本是什么」就会开始瞎编。网页搜索等于给智能体接了一根「网线」：先搜、再读结果、最后带出处回答。企业内网或合规要求下不想让它上网，就把 <code>websearch</code> 设为 <code>false</code> 一键拔线。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

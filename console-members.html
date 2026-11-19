@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>成员 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-members" data-group="Console" data-src="https://opencode.ai/docs/console/members/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>成员</h1>
+<p class="lede">所有者（Owner）和管理员（Admin）在 <strong>Settings › Members</strong> 页管理人员。点开一位成员，可以查看他的用量和预算策略。</p>
+
+<h2>邀请成员</h2>
+<ol>
+<li>打开 <strong>Settings › Members</strong>，点击 <strong>Invite Members</strong>。</li>
+<li>添加一个或多个邮箱地址。可以用空格、逗号或分号分隔，也可以直接粘贴一整份名单。</li>
+<li>点击 <strong>Send invitations</strong>。</li>
+</ol>
+<p>每个人都会收到一封标题为 <strong>Join Acme Inc. on OpenCode</strong> 的邮件，内含 <strong>Join workspace</strong> 按钮。</p>
+<p>邀请 7 天后过期。所有人加入时都是 <strong>Member</strong> 角色；等他们加入后再<a href="#change-a-role">调整角色</a>。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>在 <a href="console-go.html">OpenCode Go</a> 和 Go Plus 计划下，你邀请进来的人只能用免费模型或工作区余额，<strong>不会</strong>自动获得你的 Go 额度。要让每个人都拥有独立的 Go 上限，请升级到 Go Teams（$20/成员/月，最少 2 名成员）。第二位成员之后，每位成员从加入当月起每月收 $20。</p>
+</aside>
+
+<p>成员也可以自动加入：</p>
+<ul>
+<li><a href="console-sso.html#automatic-membership">SSO</a>——在你已验证的邮箱域名下，新用户首次登录时自动加入。</li>
+<li><a href="console-scim.html">目录同步（Directory sync）</a>——你在身份提供商（IdP）里指派或移除人员时，Console 自动增删成员。</li>
+</ul>
+
+<h2 id="accept-an-invitation">接受邀请</h2>
+<p>受邀者必须用收到邀请的那个邮箱地址登录。接受邀请有两种方式：</p>
+<ul>
+<li>点击邀请邮件中的 <strong>Join workspace</strong>，然后登录或注册账号。</li>
+<li>登录 Console，打开工作区菜单，在 <strong>Pending invitations</strong> 下点击 <strong>Join</strong>。</li>
+</ul>
+<p>如果他们用别的账号登录，Console 会要求他们 <strong>Sign out and continue</strong>（退出并用受邀邮箱继续）。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>邀请是「认邮箱不认人」的：邮件发给谁的邮箱，就得用那个邮箱的账号进。这样能防止你把 A 的邮箱地址手滑填成 B，结果 B 混进了团队。如果你的邀请名单里邮箱写错了，直接在待处理邀请里吊销重发即可。</p>
+</aside>
+
+<h2>管理待处理邀请</h2>
+<p>待处理邀请会出现在 Members 表中，显示为 <strong>Pending · Expires</strong> 加日期，或 <strong>Expired</strong>（已过期）。</p>
+<table>
+<thead><tr><th>操作</th><th>方式</th></tr></thead>
+<tbody>
+<tr><td>重发（Resend）</td><td><strong>⋯ › Resend invitation</strong>。发送一个新的 7 天有效链接；旧链接随即失效。</td></tr>
+<tr><td>吊销（Revoke）</td><td><strong>⋯ › Remove...</strong>。链接立即失效。</td></tr>
+</tbody>
+</table>
+
+<h2 id="change-a-role">修改角色</h2>
+<p>打开成员所在行的角色菜单，选择 <strong>Member</strong>、<strong>Admin</strong> 或 <strong>Owner</strong>。</p>
+<p>你只能授予不高于自己的角色，且工作区始终至少保留一名所有者。见 <a href="console-workspaces.html#roles">Roles</a>。</p>
+
+<h2>移除成员</h2>
+<ol>
+<li>点击成员所在行的 <strong>⋯ › Remove...</strong>。</li>
+<li>点击 <strong>Remove member</strong> 确认。</li>
+</ol>
+<p>其访问权限立即被吊销，之后你仍可以再次邀请他。他过去的使用记录会留在工作区报表里。</p>
+<p>移除成员还会吊销他在该工作区创建的所有 API key，包括服务账号的 key。服务账号本身会保留，其他人创建的 key 继续有效。见 <a href="console-api.html#revocation">Revocation</a>。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「移除成员会连带吊销他创建的 key」是一条重要的安全设计：避免「人走了，key 还在自动跑」的幽灵调用。但注意反向推论——别把重要的长期服务账号 key 交给某个具体成员去创建，否则他离职时这条 key 也会一起断，生产线上的自动化任务会突然报 401。服务账号的创建和 key 管理最好由 Admin 亲自操作。</p>
+</aside>
+
+<h2>成员详情</h2>
+<p>点击一位成员，可以查看他的月度预算、使用的模型和客户端、用量图表和请求日志。在这里你可以为他设置<a href="console-budgets.html#member-budgets">预算</a>，并把他的用量导出为 CSV。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

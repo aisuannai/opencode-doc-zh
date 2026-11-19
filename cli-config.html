@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TUI 设置 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-config" data-group="CLI" data-src="https://opencode.ai/docs/cli/config/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>TUI 设置</h1>
+<p class="lede">CLI 设置只管终端客户端（TUI / mini）本身的外观与行为，和服务器端、项目级的 <code>opencode.json(c)</code> 设置是分开的两套。本页逐项列出 <code>cli.json</code> 的全部可用配置。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>OpenCode 的配置分三层：<a href="config.html"><code>opencode.json</code></a> 是「项目章程」（模型、agent、权限，跟着项目走），而 <code>cli.json</code> 是「你的个人仪表盘设置」（主题、光标、滚动速度，跟着你的终端走）。改字体大小不影响发动机，改的是座椅和后视镜。</p>
+</aside>
+
+<h2>快速修改</h2>
+<p>在 TUI 里按 <kbd>Ctrl+P</kbd>，选择 <strong>Open settings</strong>，即可在界面中直接修改常用设置（打开后是一个设置对话框，无需手写 JSON）。</p>
+
+<h2>配置文件</h2>
+<p>OpenCode 把 CLI 设置存放在一个全局文件里：</p>
+<div class="term-head"><span>路径</span><span></span></div>
+<pre><code>~/.config/opencode/cli.json</code></pre>
+<p>如果设置了 <code>$XDG_CONFIG_HOME</code>，则使用：</p>
+<div class="term-head"><span>路径</span><span></span></div>
+<pre><code>$XDG_CONFIG_HOME/opencode/cli.json</code></pre>
+<p><strong>没有</strong>项目级的 CLI 设置文件——这套配置永远是全局的。加上官方发布的 JSON Schema 即可获得校验和自动补全：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}</code></pre>
+<p>OpenCode 在首次创建或迁移这个文件时会自动写入 <code>$schema</code>。TUI 运行期间的有效修改会热重载。未知的设置项会被忽略；保留 <code>$schema</code>，编辑器就能标出无效值。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>两套配置别混着写：模型、agent、MCP 服务器这些要写进项目里的 <code>opencode.json</code>（见<a href="config.html">配置</a>一章），写进 <code>cli.json</code> 是不生效的；反过来主题、快捷键这类只认 <code>cli.json</code>。手改 <code>cli.json</code> 时务必保留 <code>$schema</code> 字段，否则编辑器不会帮你检查拼写错误，而 OpenCode 对未知键只是静默忽略——写错了不会有任何报错提示。</p>
+</aside>
+
+<h2>内联配置</h2>
+<p>设置环境变量 <code>OPENCODE_CLI_CONFIG_CONTENT</code>，可以用内联 JSON 临时应用 CLI 设置：</p>
+<div class="term-head"><span>sh</span><span>单次启动生效</span></div>
+<pre><code>OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode</code></pre>
+<p>内联设置会<strong>合并</strong>到全局 <code>cli.json</code> 之上：嵌套对象做深层合并，而数组和标量值会直接替换全局值。只要这个变量还在，内联设置就始终优先。</p>
+
+<h2>外观</h2>
+<p>选择主题、控制界面动效、覆盖终端光标样式：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>theme.name</code></td><td>字符串</td><td>选择内置主题、自定义主题或从终端提取的主题。</td></tr>
+<tr><td><code>theme.mode</code></td><td><code>system</code> / <code>dark</code> / <code>light</code></td><td>跟随终端外观，或将主题锁定为单一明暗模式。</td></tr>
+<tr><td><code>animations</code></td><td>布尔值</td><td>是否启用界面动画。</td></tr>
+<tr><td><code>cursor.style</code></td><td><code>block</code> / <code>underline</code> / <code>line</code> / <code>default</code></td><td>设置光标形状。<code>default</code> 表示保留终端自己的光标形状。</td></tr>
+<tr><td><code>cursor.blinking</code></td><td>布尔值</td><td>控制光标闪烁。当 style 为 <code>default</code> 时此项无效。</td></tr>
+</tbody>
+</table>
+<p>主题的选择与创建见<a href="cli-theme.html">TUI 主题</a>一页。</p>
+
+<h2>输入</h2>
+<p>配置鼠标捕获、滚动、编辑器上下文、粘贴行为和 prompt 图片预览：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>mouse</code></td><td>布尔值</td><td>是否启用终端鼠标捕获。</td></tr>
+<tr><td><code>scroll.speed</code></td><td>数字，最小 <code>0.001</code></td><td>每次滚动输入的固定滚动距离。</td></tr>
+<tr><td><code>scroll.acceleration</code></td><td>布尔值</td><td>连续滚动时加速。启用后优先于 speed。</td></tr>
+<tr><td><code>prompt.editor</code></td><td>布尔值</td><td>是否把当前编辑器打开的文件或选区作为 prompt 上下文。</td></tr>
+<tr><td><code>prompt.paste</code></td><td><code>compact</code> / <code>full</code></td><td>大段粘贴内容显示为紧凑占位符，还是显示全文。</td></tr>
+<tr><td><code>prompt.image_preview</code></td><td>布尔值</td><td>是否在 prompt 输入框上方显示图片附件预览。</td></tr>
+</tbody>
+</table>
+
+<h2>会话</h2>
+<p>配置全屏 TUI 会话的呈现方式，以及新会话的起始位置：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "submit_scroll": "bottom",
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>session.sidebar</code></td><td><code>auto</code> / <code>hide</code></td><td>空间够时显示侧边栏，或始终隐藏。</td></tr>
+<tr><td><code>session.scrollbar</code></td><td>布尔值</td><td>是否显示对话记录滚动条。</td></tr>
+<tr><td><code>session.submit_scroll</code></td><td><code>bottom</code> / <code>keep</code></td><td>发送 prompt 时跳到最新消息，还是保持当前位置。</td></tr>
+<tr><td><code>session.thinking</code></td><td><code>show</code> / <code>hide</code></td><td>默认显示或隐藏模型推理过程。</td></tr>
+<tr><td><code>session.grouping</code></td><td><code>auto</code> / <code>none</code></td><td>把相关对话条目分组呈现，还是逐条独立渲染。</td></tr>
+<tr><td><code>session.image_preview</code></td><td>布尔值</td><td>是否在对话记录中显示用户附件和工具结果的图片。</td></tr>
+<tr><td><code>session.tps</code></td><td>布尔值</td><td>是否在助手消息底部显示每秒输出 token 数。</td></tr>
+<tr><td><code>session.markdown</code></td><td><code>source</code> / <code>rendered</code></td><td>显示 Markdown 源码标记，还是隐藏标记、显示渲染后的效果。</td></tr>
+<tr><td><code>session.new_location</code></td><td><code>launch</code> / <code>inherit</code></td><td>新会话从 TUI 启动目录开始，还是继承当前活动会话的位置。</td></tr>
+<tr><td><code>session.permissions</code></td><td><code>prompt</code> / <code>autoaccept</code></td><td>权限请求逐个弹窗询问，还是自动接受每个请求。</td></tr>
+</tbody>
+</table>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>session.permissions: "autoaccept"</code> 意味着模型执行任何命令、改任何文件都不再问你——只建议在一次性容器、专用虚拟机或完全可控的沙箱里使用。日常开发请保持 <code>"prompt"</code>，更细粒度的权限规则请配置在项目的 <a href="permissions.html">opencode.json 权限</a>部分，而不是这里。</p>
+</aside>
+
+<h2>标签页</h2>
+<p>配置常驻的会话标签栏：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}</code></pre>
+<p>旧的布尔值 <code>tabs.enabled</code> 依然兼容：<code>true</code> 等价于 <code>on</code>，<code>false</code> 等价于 <code>off</code>。OpenCode 会直接读取它，不会改写你的配置文件。</p>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>tabs.mode</code></td><td><code>auto</code> / <code>on</code> / <code>off</code></td><td>自动使用、始终使用或从不使用标签页。auto 模式下在 Herdr 中会自动隐藏。</td></tr>
+<tr><td><code>tabs.scope</code></td><td><code>cwd</code> / <code>global</code></td><td>按工作目录各留一套标签，还是全局共享。</td></tr>
+<tr><td><code>tabs.layout</code></td><td><code>horizontal</code> / <code>vertical</code></td><td>标签排成横向条，还是纵向侧栏。</td></tr>
+<tr><td><code>tabs.indicators</code></td><td><code>status</code> / <code>numbers</code></td><td>显示状态图标，还是始终显示标签编号。</td></tr>
+</tbody>
+</table>
+<p>编号指示依然保留状态颜色和背景动画。两种模式下都可以用 <kbd>Ctrl+数字</kbd> 快捷键切换标签。</p>
+
+<h2>Diff 视图</h2>
+<p>配置 diff 的初始范围和呈现方式：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>diffs.source</code></td><td><code>branch</code> / <code>committed</code> / <code>working</code> / <code>turn</code></td><td>设置初始审查范围。</td></tr>
+<tr><td><code>diffs.wrap</code></td><td><code>word</code> / <code>none</code></td><td>长行按单词折行，还是不折行。</td></tr>
+<tr><td><code>diffs.tree</code></td><td>布尔值</td><td>是否显示 diff 文件树。</td></tr>
+<tr><td><code>diffs.single</code></td><td>布尔值</td><td>是否只显示选中文件的补丁。</td></tr>
+<tr><td><code>diffs.view</code></td><td><code>auto</code> / <code>split</code> / <code>unified</code></td><td>布局方式。<code>auto</code> 会根据可用宽度自动选择。</td></tr>
+</tbody>
+</table>
+<p><code>branch</code> 显示<strong>整个分支</strong>及本地改动（All）；<code>committed</code> 只显示分支上的提交；<code>working</code> 显示已暂存、未暂存和未跟踪的改动。<code>turn</code> 显示 <strong>Last turn</strong>，即会话在最近一轮中改动的文件——会话每完成一轮就刷新；当 <code>/diff</code> 不是从会话里打开时，会退回到 <code>branch</code>。</p>
+<p>在 <code>/diff</code> 视图中按 <kbd>d</kbd> 可以切换范围，或从 <strong>Base</strong> 中选择一个对比分支。这些视图内的选择只在本次 TUI 会话中有效，不会写入 <code>cli.json</code>。</p>
+
+<h2>提醒</h2>
+<p>系统通知和提示音可以独立开关：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>attention.notifications</code></td><td>布尔值</td><td>显示系统通知，通常只在终端未聚焦时触发。</td></tr>
+<tr><td><code>attention.sound</code></td><td>布尔值</td><td>播放提示音。</td></tr>
+<tr><td><code>attention.volume</code></td><td><code>0</code> 到 <code>1</code> 的数字</td><td>设置音量。</td></tr>
+<tr><td><code>attention.sound_pack</code></td><td>字符串</td><td>选择当前生效的音效包 ID。</td></tr>
+<tr><td><code>attention.sounds</code></td><td>对象</td><td>按事件覆盖音效文件，可选事件：<code>default</code>、<code>question</code>、<code>permission</code>、<code>error</code>、<code>done</code>、<code>subagent_done</code>。</td></tr>
+</tbody>
+</table>
+<p>无效或不可读的覆盖文件会回退到该事件的内置音效。</p>
+
+<h3>更新亮点弹窗</h3>
+<p>OpenCode 更新后，TUI 会在主页一次性显示本次发布的新功能亮点。想再看一次可运行 <code>/highlights</code>，或者彻底关掉这个弹窗：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "highlights": false
+}</code></pre>
+
+<h2>终端集成</h2>
+<p>配置与终端本身相关的行为：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>terminal.title</code></td><td>布尔值</td><td>是否更新终端窗口标题。</td></tr>
+<tr><td><code>terminal.copy</code></td><td><code>manual</code> / <code>select</code></td><td>手动复制，还是选中即复制。平台默认值：Windows 为 <code>manual</code>，其它平台为 <code>select</code>。</td></tr>
+</tbody>
+</table>
+
+<h2>Mini 界面</h2>
+<p><code>mini</code> 配置组控制 <a href="cli-intro.html"><code>opencode mini</code></a> 极简交互界面：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>mini.thinking</code></td><td><code>show</code> / <code>hide</code></td><td>显示或隐藏模型推理过程。</td></tr>
+<tr><td><code>mini.tools</code></td><td><code>show</code> / <code>hide</code></td><td>显示或隐藏工具调用及其前面的助手文字。</td></tr>
+<tr><td><code>mini.shell_output</code></td><td><code>show</code> / <code>hide</code></td><td>显示或隐藏 shell 工具的原始输出。</td></tr>
+<tr><td><code>mini.turn_summary</code></td><td><code>show</code> / <code>hide</code></td><td>显示或隐藏滚动记录中的 agent、模型与耗时摘要。</td></tr>
+<tr><td><code>mini.footer</code></td><td><code>show</code> / <code>hide</code></td><td>显示或隐藏常驻的活动状态、模型、用量与上下文信息。</td></tr>
+<tr><td><code>mini.splash</code></td><td><code>show</code> / <code>hide</code></td><td>显示或隐藏进入和退出的横幅画面。</td></tr>
+<tr><td><code>mini.work_spinner</code></td><td>spinner ID</td><td>选择页脚的工作状态动画。</td></tr>
+<tr><td><code>mini.mono</code></td><td>布尔值</td><td>使用单色 ASCII 输出。</td></tr>
+<tr><td><code>mini.replay</code></td><td>布尔值</td><td>恢复会话时以及终端尺寸变化时重放历史记录。</td></tr>
+<tr><td><code>mini.replay_limit</code></td><td>正整数</td><td>限制重放的消息条数（只重放最新的）。默认上限 <code>200</code>。</td></tr>
+</tbody>
+</table>
+<p>可用的 spinner ID 有：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed</code></pre>
+<p>命令行上给 <code>mini</code> 传的重放（replay）参数会覆盖这些设置，但仅对该次调用生效。</p>
+
+<h2>快捷键</h2>
+<p>可以覆盖某个命令的键绑定和前导键超时：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "&lt;leader&gt;q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>keybinds.leader</code></td><td>绑定值</td><td>设置其它绑定中 <code>&lt;leader&gt;</code> 引用的按键。</td></tr>
+<tr><td><code>keybinds.&lt;command&gt;</code></td><td>绑定值</td><td>覆盖单个命令 ID 的绑定。</td></tr>
+<tr><td><code>keybinds.*.key</code></td><td>按键字符串或描述符</td><td>为对象形式的绑定选择按键。</td></tr>
+<tr><td><code>keybinds.*.event</code></td><td><code>press</code> / <code>release</code></td><td>将对象绑定限制在单一按键事件上。</td></tr>
+<tr><td><code>keybinds.*.preventDefault</code></td><td>布尔值</td><td>控制是否阻止终端对该键的默认行为。</td></tr>
+<tr><td><code>keybinds.*.fallthrough</code></td><td>布尔值</td><td>允许优先级更低的处理器也接收同一事件。</td></tr>
+<tr><td><code>leader.timeout</code></td><td>正整数</td><td>设置按下前导键之后的等待毫秒数。</td></tr>
+</tbody>
+</table>
+<p>绑定值可以是字符串、备选按键数组，或对象。用 <code>"none"</code> 或 <code>false</code> 可以禁用某个绑定。按键语法、全部命令 ID 和全部默认绑定见<a href="cli-keybinds.html">快捷键</a>一页。</p>
+
+<h2>插件</h2>
+<p>按顺序加载仅限终端客户端使用的插件：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>plugins</code></td><td>数组</td><td>声明按顺序排列的启停指令和外部插件。</td></tr>
+<tr><td><code>plugins[].package</code></td><td>字符串</td><td>包名、本地路径或 file URL。</td></tr>
+<tr><td><code>plugins[].options</code></td><td>对象</td><td>传给该插件的专属选项。</td></tr>
+</tbody>
+</table>
+<p>包的写法、本地发现、通配符和禁用指令详见<a href="cli-plugins.html">TUI 插件</a>一页。</p>
+
+<h2>调试与实验性功能</h2>
+<p>开启诊断选项，或主动加入当前可用的实验：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}</code></pre>
+<table>
+<thead><tr><th>设置项</th><th>可选值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>debug.devtools</code></td><td>布尔值</td><td>显示 DevTools 调试栏。</td></tr>
+<tr><td><code>debug.timing</code></td><td>布尔值</td><td>在调试栏中显示首次绘制耗时诊断。</td></tr>
+<tr><td><code>debug.turn_tokens</code></td><td>布尔值或 <code>verbose</code></td><td>显示每轮的 token 用量；<code>verbose</code> 还会包含工具调用输入。</td></tr>
+<tr><td><code>experimental</code></td><td>功能 ID → 布尔值的对象</td><td>启用或禁用实验功能。这些功能可能随时变化或移除，不另行通知。</td></tr>
+</tbody>
+</table>
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><code>experimental</code> 里只应填写 TUI 的 <strong>Experiments</strong> 对话框中当前列出的功能 ID，未知 ID 没有任何效果。实验功能是官方在正式发布前的「试吃装」——不稳定、可能随时改接口，但能提前体验新特性。日常开发不建议开启，除非你在跟进某个具体的新特性。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

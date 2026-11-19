@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TUI 插件 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-plugins" data-group="CLI" data-src="https://opencode.ai/docs/cli/plugins/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>TUI 插件</h1>
+<p class="lede">在 <code>opencode.json(c)</code> 里配置、且暴露了 TUI 组件的插件，会被 CLI 自动加载。想学习如何开发插件，见<a href="build-plugins.html">构建插件</a>一章。<strong>不需要</strong>把同一个包再写进 <code>cli.json</code>——CLI 从所连接的 OpenCode 服务器获取激活的插件列表，所以即使服务器在远程也一样生效。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>插件分两种加载来源：<code>opencode.json</code> 里的插件跟着<strong>服务器</strong>走（哪怕服务器在远程机器上，TUI 也能拿到它们的组件）；<code>cli.json</code> 里的插件则<strong>只在本地终端运行</strong>，即使 CLI 连的是远程服务器也保持活跃。前者像公司统一配发的工牌，后者像你自己的私人物品——各管各的，互不冲突。</p>
+</aside>
+
+<h2>CLI 专属插件</h2>
+<p>用 <code>cli.json</code> 配置仅限 CLI 使用的插件。这些插件在终端里本地运行：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}</code></pre>
+<p>条目按顺序处理。在 ID 或通配符前加 <code>-</code> 可以禁用匹配的插件：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}</code></pre>
+<p>用对象形式可以给插件传选项：</p>
+<div class="term-head"><span>cli.json</span><span></span></div>
+<pre><code>{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}</code></pre>
+
+<h2>本地发现</h2>
+<p>OpenCode 还会在全局配置目录和项目的 <code>.opencode</code> 目录下自动发现插件。每个插件使用与已发布包相同的目录结构，服务器和 TUI 入口放在一起：</p>
+<div class="term-head"><span>插件发现路径</span><span></span></div>
+<pre><code>&lt;global-config&gt;/plugins/status/index.ts
+&lt;global-config&gt;/plugins/status/tui.ts
+&lt;project&gt;/.opencode/plugins/status/index.ts
+&lt;project&gt;/.opencode/plugins/status/tui.ts</code></pre>
+<p>被发现的插件可以直接 <code>import "@opencode/plugin/tui"</code>，OpenCode 会在运行时解析这个包。示例见<a href="build-plugins-cli.html">构建 TUI 插件</a>。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「自动发现」意味着本地开发的插件甚至不用注册：在项目的 <code>.opencode/plugins/</code> 下建好目录、写好 <code>index.ts</code> 和 <code>tui.ts</code>，重启 OpenCode 就会生效。这非常适合快速迭代自己的状态栏小组件——配合 <code>opencode plugin list</code> 可以确认它确实被加载了。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

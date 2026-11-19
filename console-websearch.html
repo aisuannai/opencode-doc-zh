@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网页搜索 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-websearch" data-group="Console" data-src="https://opencode.ai/docs/console/websearch/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>网页搜索</h1>
+<p class="lede">Console 为已连接的 OpenCode 用户提供托管的网页搜索（hosted web search）。工作区所有者或管理员只需在工作区层面启用一次，成员无需各自配置搜索提供商的 API key。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>正常接搜索能力，每个人都得去注册搜索 API、领 key、写配置。托管搜索把这一切变成「管理员开一次闸，全队直接用」：搜索请求由 Console 代发、代付（每次成功搜索 1 美分），计入工作区余额和成员的消费限额。对成员来说体验就是——聊天里问一句最新资讯，OpenCode 自己去搜。</p>
+</aside>
+
+<h2>启用</h2>
+<ol>
+<li>以工作区所有者或管理员身份登录<a href="https://opencode.ai/console" target="_blank" rel="noopener">控制台</a>。</li>
+<li>打开 <strong>Integrations</strong>，在 <strong>Hosted Web Search</strong> 上点击 <strong>Set up</strong>。</li>
+<li>点击 <strong>Enable</strong>。</li>
+</ol>
+<p>然后每位成员用 <code>/connect</code> 把 OpenCode 连接到工作区：</p>
+<div class="term-head"><span>OpenCode 命令</span><span></span></div>
+<pre><code>/connect</code></pre>
+<p>工作区配置会把 <strong>OpenCode Web Search</strong> 设为默认搜索提供商。成员不需要设置 <code>websearch.provider</code>，也不需要添加提供商 API key。如果某个成员自己设置了 <code>websearch.provider</code>，则以他自己的选择为准。</p>
+
+<h2>搜索</h2>
+<p>在提示词里直接向 OpenCode 索要最新信息即可。搜索由 OpenCode 执行，而不是在 Console 的某个交互页面里进行。</p>
+<div class="term-head"><span>提示词示例</span><span></span></div>
+<pre><code>Find the latest Bun release and summarize the changes with source links.</code></pre>
+<p>托管提供商搜索公共网络，最多返回八条结果。OpenCode 利用这些结果回答你的问题并引用来源。</p>
+<p>要配置权限或禁用该工具，见<a href="websearch.html">网页搜索指南</a>。</p>
+
+<h2>计费</h2>
+<p>搜索返回有效结果集后，Console 收取 <strong>$0.01</strong>。失败和被限流的搜索不收费。</p>
+<p>网页搜索费用在 <strong>Activity › Usage</strong>、<strong>Activity › Overview</strong>、成员活动、发票和 CSV 导出中与模型用量分开列示。适用的全支出（all-spend）预算策略同样覆盖网页搜索费用。</p>
+
+<h2>隐私</h2>
+<p>托管网页搜索实行零数据保留（zero data retention）。Console 及其托管搜索提供商只处理每次查询及其结果，不存储其内容。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「零数据保留」意味着你的搜索词不会成为训练数据或被长期留档，对处理敏感业务线索的场景比较友好。另外注意：搜索走的是公共网络，只能搜到公开网页——内部 wiki、私有数据库里的内容它碰不到，那种需求要靠 MCP 工具或本地检索来解决。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>连接模型 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-providers" data-group="CLI" data-src="https://opencode.ai/docs/cli/providers/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>连接模型</h1>
+<p class="lede">在 TUI 里运行 <code>/connect</code> 连接一个提供商（provider），再用 <code>/models</code> 挑选它的模型。不想开 TUI 也可以用 <code>opencode auth</code> 命令行完成同样的操作。</p>
+
+<h2>在 TUI 中连接</h2>
+<div class="term-head"><span>text</span><span>TUI 内输入</span></div>
+<pre><code>/connect
+/models</code></pre>
+<p><code>/connect</code> 会列出当前服务器和项目可用的集成。选中一个提供商，如果它提供多种认证方式就选择其一，然后跟着提示走即可。</p>
+
+<h3>TUI 里的认证方式</h3>
+<p>TUI 支持 API key、OAuth 以及提供商自带的认证命令。OAuth 会打开一个授权 URL 或显示一个待输入的授权码；按 <kbd>o</kbd> 打开 URL，按 <kbd>c</kbd> 复制授权信息：</p>
+<div class="term-head"><span>text</span><span>示例</span></div>
+<pre><code>/connect
+# 选择 OpenAI，再选 Codex device code (legacy)。</code></pre>
+<p>再运行一次 <code>/connect</code> 可以添加另一个账号。选中一个已连接的提供商，会打开它的账号列表，你可以激活、重命名或删除已保存的账号。</p>
+
+<h2>命令行方式</h2>
+<p>用 <code>auth login</code> 可以不开 TUI 完成同样的提供商认证。不带提供商参数时，命令会打开一个交互式提供商选择器：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode auth login</code></pre>
+<p>传入集成 ID 或名称可以跳过第一步选择器。用 <code>--method key</code> 可以显式选择 API key 输入方式：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode auth login anthropic --method key</code></pre>
+<p>方式 ID（method ID）由各提供商自行定义。当某提供商有多种方式时，不带 <code>--method</code> 运行即可看到可用方式列表：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode auth login openai</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>API key 输入和提供商表单都<strong>需要交互式终端</strong>；需要你粘贴授权码的 OAuth 方式也一样。在 CI 脚本、无终端的后台任务里走这条路会直接失败——那种场景请改用环境变量方式注入密钥（见下文）。</p>
+</aside>
+
+<h2>四种认证方式</h2>
+<p>OpenCode 通过四种集成方式接收提供商凭据：</p>
+<table>
+<thead><tr><th>方式</th><th>行为</th></tr></thead>
+<tbody>
+<tr><td>API key</td><td>提示输入密钥，保存为一个提供商账号。</td></tr>
+<tr><td>OAuth</td><td>给出浏览器 URL、设备码或授权码提示，保存 token，并在支持时自动刷新。</td></tr>
+<tr><td>命令（Command）</td><td>运行提供商指定的认证命令，把其标准输出保存为 key。</td></tr>
+<tr><td>环境变量（Environment）</td><td>直接从服务器进程读取受支持的环境变量，不落盘保存。</td></tr>
+</tbody>
+</table>
+<p>提供商可以为 API key 和 OAuth 方式附加表单，用于收集必需的细节（例如 Azure 资源名或 GitHub Enterprise 域名）。CLI 和 TUI 会在开始认证前渲染这些表单。</p>
+
+<h2>环境变量连接</h2>
+<p>把提供商支持的环境变量设置到执行模型请求的服务器进程上。一次性私有服务器可以在启动独立模式时传入：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>ANTHROPIC_API_KEY=sk-ant-... opencode --standalone</code></pre>
+<p>对共享后台服务器，则把变量加进它的托管环境。这会停止正在运行的服务，下一条 OpenCode 命令会用新值把它启动起来：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list</code></pre>
+<p>环境变量连接在 <code>auth list</code> 里显示为 <code>environment</code> 类型。<strong>它们不是账号：</strong><code>auth logout</code> 无法移除它们，想断开就 unset 那个变量。同一集成下，已保存的账号优先于环境变量连接：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode auth list
+opencode service unset env ANTHROPIC_API_KEY</code></pre>
+
+<h3>原生凭据链</h3>
+<p>除了 API key 变量，一些提供商还会使用它们各自的原生环境凭据链：</p>
+<ul>
+<li><strong>Amazon Bedrock</strong> 支持 AWS 默认凭据链，包括 profile、access key 环境变量、web identity 和容器凭据；也支持 <code>AWS_BEARER_TOKEN_BEDROCK</code>。</li>
+<li><strong>Google Vertex</strong> 使用 Application Default Credentials 和一个可解析的项目。例如先用 <code>gcloud auth application-default login</code> 认证，再设置 <code>GOOGLE_CLOUD_PROJECT</code>。</li>
+<li><strong>Azure</strong> 在安装了 <code>az</code> 时，把 <strong>Microsoft Entra ID (Azure CLI)</strong> 暴露为一种连接方式。先运行 <code>az login</code>，然后在 <code>/connect</code> 或 <code>auth login azure</code> 中选择该方式。</li>
+</ul>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode</code></pre>
+<p>提供商专属配置和服务器端设置见 <a href="providers.html">Providers</a> 一章。</p>
+
+<h2>账号管理</h2>
+<p>每次成功的 API key、OAuth 或命令登录都会创建一个<strong>已保存的账号</strong>。最新的账号自动成为当前激活账号；可以用标签或凭据 ID 切换激活账号：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode auth list
+opencode auth switch anthropic work</code></pre>
+<p>用 <code>auth logout</code> 移除已保存的账号。这两个命令省略参数时都会打开选择器：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode auth logout anthropic work</code></pre>
+<p>在 TUI 里，<code>/connect</code> 提供对已保存账号同样的添加、激活、重命名和删除操作。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>「多账号 + 激活」的模型好比一个钥匙串上挂了好几把同一家的钥匙：你可以有个人号和公司号两个 Anthropic 账号（比如标签分别叫 <code>personal</code> 和 <code>work</code>），平时用 <code>auth switch</code> 一键换钥匙。换的不是工具，只是它下个项目该用谁的额度。</p>
+</aside>
+
+<h2>凭据存储</h2>
+<p>已保存的 API key 和 OAuth token 存放在服务器的 SQLite 数据库里。本地服务器的数据库路径可以这样打印：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>opencode debug paths db</code></pre>
+<p>常规发布渠道的路径是 <code>~/.local/share/opencode/opencode.db</code>；<code>XDG_DATA_HOME</code>、发布渠道和 <code>OPENCODE_DB</code> 都可能改变它。<strong>不要直接编辑数据库来管理凭据</strong>，请使用 <code>/connect</code> 或 <code>auth</code> 命令。</p>
+<p>V2 在数据库迁移期间会从 OpenCode 数据目录里旧版的 <code>auth.json</code> 导入受支持的凭据。新的和更新的凭据存入 SQLite，不会写回那个文件。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>从 V1 迁移的老用户不用担心：旧 <code>auth.json</code> 里的凭据会在首次启动 V2 时自动搬进数据库，之后 <code>auth.json</code> 就只是历史遗迹了。如果你在多台机器间同步凭据，用 <code>opencode auth export</code> / <code>import</code> 这对官方命令（详见<a href="cli-commands.html">TUI 命令</a>的 auth 部分），注意导出文件里是明文密钥，务必妥善保管。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

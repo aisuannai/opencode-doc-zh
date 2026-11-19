@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>账单 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-billing" data-group="Console" data-src="https://opencode.ai/docs/console/billing/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>账单</h1>
+<p class="lede">Console 对任何规模的团队都免费，没有按座位收费。你只为用量付费，费用从覆盖整个工作区的预付额度（credits）中扣除。所有者（Owner）和管理员（Admin）在 <strong>Settings › Billing</strong> 管理账单。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>Console 的收费模型是「先充值、后消费」的电话卡模式：整个工作区共用一个额度池，谁用谁扣。没有月费、没有人头费，团队再大也是免费用控制台，只付模型消耗的钱。通过<a href="console-providers.html">自有提供商</a>产生的用量则由该提供商直接向你收费，与 Console 无关。</p>
+</aside>
+
+<h2>添加支付方式</h2>
+<ol>
+<li>打开 <strong>Settings › Billing</strong>。</li>
+<li>在 <strong>Payment methods</strong> 下点击 <strong>Add</strong>。</li>
+<li>选择一种方式，完成 Stripe 的设置流程。</li>
+</ol>
+<p>支持的支付方式：</p>
+<ul>
+<li>Card（银行卡）</li>
+<li>Link</li>
+<li>Alipay（支付宝）</li>
+<li>UPI</li>
+<li>WeChat Pay（微信支付）</li>
+</ul>
+<p>用 <strong>⋯ › Make default</strong> 选择自动扣款时使用的默认支付方式。移除某个支付方式，可能会让依赖它的自动充值和 Go 续费停摆。</p>
+
+<h2 id="add-credits">充值额度</h2>
+<ol>
+<li>在 <strong>Credits</strong> 下点击 <strong>Add credits</strong>。</li>
+<li>选择 $10、$50 或 $100，或选 <strong>Other</strong> 自行输入金额。</li>
+<li>选择支付方式，点击 <strong>Confirm and pay</strong>。</li>
+</ol>
+<p>充值会额外加收 <strong>4.6% + $0.31</strong> 的手续费：例如买 $50 实际支付 $52.61，但入账的是完整的 $50。</p>
+
+<h2>自动充值（Auto-recharge）</h2>
+<p>自动充值会在余额不足时自动购买额度。</p>
+<ol>
+<li>在 <strong>Auto-recharge</strong> 下点击 <strong>Add rule</strong>。</li>
+<li>设置触发扣款的余额阈值和每次充入的金额。</li>
+<li>点击 <strong>Save</strong>。</li>
+</ol>
+<p>自动充值使用默认支付方式扣款，手续费包含在内。如果扣款失败，自动充值会关闭，直到你重新设置。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>自动充值是一次性开关，不是「失败了自动重试」：一次扣款失败它就直接停用，需要你手动重新配置。跑自动化任务的工作区尤其要留意——半夜余额见底又恰逢银行卡过期，任务就会断在 402 错误上。建议把触发阈值设得高一些，并保持默认支付方式有效。</p>
+</aside>
+
+<h2>查看余额</h2>
+<p><strong>Activity</strong> 页的 <strong>Billing</strong> 卡片会为所有者和管理员显示余额，并可以打开 <strong>Settings › Billing</strong>。</p>
+<p>工作区页头上的 <strong>Billing</strong> 按钮（或按 <code>B</code> 键）会打开一个抽屉，实时显示 Go 上限、额度和用量。所有者和管理员可以看到工作区的余额、用量和自动充值情况；成员只能看到自己的用量和上限。</p>
+
+<h2>额度用尽时</h2>
+<p>余额一旦归零，付费请求会以 HTTP <code>402</code> 失败。余额永远不会变成负数。</p>
+<div class="term-head"><span>text</span><span>错误信息</span></div>
+<pre><code>Upstream request failed: Insufficient account funds</code></pre>
+
+<h2>发票</h2>
+<p>每笔支付都会出现在 <strong>Invoices</strong> 下，带有状态，以及 <strong>Download invoice</strong>（下载发票）或 <strong>View receipt</strong>（查看收据）链接。</p>
+<table>
+<thead><tr><th>条目</th><th>产生原因</th></tr></thead>
+<tbody>
+<tr><td>Balance top-up（余额充值）</td><td>手动充值额度</td></tr>
+<tr><td>Automatic top-up（自动充值）</td><td>自动充值触发</td></tr>
+<tr><td>Go subscription（Go 订阅）</td><td>订阅 Go、Go Plus 或 Go Teams</td></tr>
+<tr><td>Go renewal（Go 续费）</td><td>Go 的月度续费</td></tr>
+<tr><td>Go Plus upgrade（升级 Go Plus）</td><td>从 Go 升级到 Go Plus</td></tr>
+<tr><td>Go Teams upgrade（升级 Go Teams）</td><td>从 Go 或 Go Plus 升级到 Go Teams</td></tr>
+<tr><td>Go Teams member（Go Teams 成员）</td><td>成员加入 Go Teams 工作区</td></tr>
+<tr><td>Monthly Usage（月度用量）</td><td>发票账单（invoiced billing）</td></tr>
+</tbody>
+</table>
+
+<h2>税务表格</h2>
+<p>美国客户可以下载 <a href="https://opencode.ai/assets/anomaly-w9.pdf" target="_blank" rel="noopener">Anomaly Innovations Inc. 的 W-9 表格</a>。</p>
+
+<h2 id="invoiced-billing">发票账单</h2>
+<p>签有额度协议（credit agreement）的工作区可以改为按月开票，而不必预购额度。请联系支持团队设置。</p>
+<ul>
+<li>用量消耗的是信用额度（credit limit），而不是预付余额。</li>
+<li>每月的发票在每月 1 日（UTC）开出，14 天后到期。</li>
+<li>未支付的发票上有 <strong>Pay now</strong> 按钮。</li>
+<li>触达信用额度上限或发票逾期时，请求会以 HTTP <code>402</code> 失败。</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>发票账单和预充值额度还有一个隐性差异：<a href="console-go.html#pay-with-credit">用额度支付 Go 订阅</a>这条路对发票账单的工作区是关闭的（Go 页面有说明）。企业谈下来的月结模式主要覆盖模型用量，订阅类产品仍走信用卡自动扣款，签约前要和财务确认清楚。</p>
+</aside>
+
+<h2>Go</h2>
+<p><a href="console-go.html">OpenCode Go</a> 订阅使用同样的支付方式，并出现在同一份发票列表中。你也可以<a href="console-go.html#pay-with-credit">用额度支付 Go</a>。在 <strong>Go</strong> 页面打开 <strong>Extra Usage</strong>，即可在触达 Go 上限后改用额度支付继续使用。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

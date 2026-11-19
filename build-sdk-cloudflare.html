@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare SDK · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-sdk-cloudflare" data-group="构建与集成" data-src="https://opencode.ai/docs/build/sdk/cloudflare/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Cloudflare SDK</h1>
+<p class="lede">在 Cloudflare Durable Object 里使用 <code>@opencode/sdk/workerd</code>。这个版本使用 Durable Object 的 SQLite 存储，为驱逐（eviction）后的恢复持久化事件，并替换掉不可用的本地文件系统和进程服务。</p>
+
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>bun add @opencode/sdk</code></pre>
+
+<p>在 Durable Object 实例的整个生命周期里持有一个宿主，而不是每个请求都创建一个：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise&lt;OpenCodeWorkerd.Interface&gt;
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =&gt;
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}</code></pre>
+
+<p><code>blockConcurrencyWhile</code> 在宿主就绪之前挡住每一个 Durable Object 事件，并在初始化失败时重置该对象。保留的这个 Promise 让请求处理器在启动后直接访问同一个宿主：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =&gt;
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}</code></pre>
+
+<p>Wrangler 通过 <code>workerd</code> 包条件（package condition）选择 OpenCode 的 Workerd 安全实现。Cloudflare 可能在不运行清理的情况下驱逐 Durable Object，所以正确性不能依赖 <code>close()</code> 被调用：</p>
+<div class="term-head"><span>wrangler.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "compatibility_flags": ["nodejs_compat"]
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>两个最容易忽略的前提：<code>nodejs_compat</code> 兼容性标志必须开着（OpenCode 的很多实现依赖 Node 兼容层）；持久化是靠 Durable Object 自带的 SQLite（<code>state.storage</code>），不是你项目里另配的数据库。另外，被驱逐时不会有任何清理回调，你的代码必须假定「随时可能消失」，靠持久化事件自己恢复。</p>
+</aside>
+
+<h2>路由出站请求（Route outbound requests）</h2>
+<p>传一个 <code>fetch</code>，把 OpenCode 的出站 HTTP 请求（OpenCode Console 配置、模型请求、网页抓取与搜索、well-known 配置、远程 MCP 服务器）路由到自定义处理器，例如 Service Binding。Code Mode 里的智能体代码继续使用 <code>globalThis.fetch</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) =&gt; {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})</code></pre>
+
+<h2>定制（Customize）</h2>
+<p>通过注册与你的 Worker 打包在一起的插件来定制 OpenCode 实例。把插件传给 <code>OpenCodeWorkerd.create()</code> 以定制 agents、模型、工具和其它行为：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) =&gt; {
+      agents.update("build", (agent) =&gt; {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})</code></pre>
+
+<p>插件的钩子、转换、工具和完整插件上下文见<a href="build-plugins-server.html">服务器插件</a>全篇。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>为什么 Durable Object 特别适合托管 OpenCode：它是单实例、有状态、自带 SQLite 的「小服务器」，天然匹配「一个宿主 + 一个存储 + 会话持久化」的形态。如果出站请求要经过 Cloudflare 的访问控制（比如让模型请求走某个 Service Binding 出网），就用上面的 <code>fetch</code> 参数做分流——注意它只拦 OpenCode 自己的出站请求，Code Mode 里用户代码的 <code>fetch</code> 不走这条路。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

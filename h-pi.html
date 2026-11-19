@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness · Pi · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="h-pi" data-group="Console" data-src="https://opencode.ai/docs/console/harnesses/pi/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Harness · Pi</h1>
+<p class="lede"><a href="https://pi.dev" target="_blank" rel="noopener">Pi</a> 内置了 OpenCode 的按量付费和 Go 两个提供商。它会为每个付费或 Go 模型自动挑选合适的 API。免费档 chat 模型要求使用 OpenCode，从 Pi 调用会返回 HTTP <code>403</code>。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><a href="console-harnesses.html#console-cli">Console CLI</a> 可以一条命令完成 Pi 的接入，并附带工作区的策略（policies）、MCP 服务器、Skills 和指令文件：<code>npx @opencode/console setup pi</code>。本文其余部分讲的是<strong>手动配置</strong>的步骤。</p>
+</aside>
+
+<table>
+<thead>
+<tr><th>提供商</th><th>套餐</th></tr>
+</thead>
+<tbody>
+<tr><td><code>opencode</code></td><td>按量付费（Pay-as-you-go）</td></tr>
+<tr><td><code>opencode-go</code></td><td>Go</td></tr>
+</tbody>
+</table>
+
+<h2>配置（Configure）</h2>
+<p>两个提供商都从环境变量 <code>OPENCODE_API_KEY</code> 读取 key。先创建一个<a href="console-harnesses.html#get-an-api-key">个人 API key</a>：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5</code></pre>
+
+<p>也可以在 Pi 里运行 <code>/login</code> 并选择提供商。Pi 会把 key 存到 <code>~/.pi/agent/auth.json</code>：</p>
+
+<div class="term-head"><span>text</span><span>在 Pi 内登录</span></div>
+<pre><code>/login opencode</code></pre>
+
+<h2>Go 订阅</h2>
+<p>使用 <code>opencode-go</code> 提供商，以及来自<strong>订阅了 <a href="console-go.html">Go</a> 的工作区</strong>的 key：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>pi --model opencode-go/kimi-k3</code></pre>
+
+<h2>模型（Models）</h2>
+<p>以 <code>&lt;provider&gt;/&lt;model-id&gt;</code> 的格式选择模型，ID 来自 <a href="console-models.html#endpoints">Console</a> 或 <a href="console-go.html#endpoints">Go</a> 端点表。用 <code>--list-models</code> 列出 Pi 已知的模型：</p>
+
+<div class="term-head"><span>bash</span><span>列出已知模型</span></div>
+<pre><code>pi --list-models opencode-go</code></pre>
+
+<p>在 <code>~/.pi/agent/settings.json</code> 里设置默认值，或在 <code>/model</code> 选择器里按 <code>Ctrl+S</code> 设为默认：</p>
+
+<div class="term-head"><span>~/.pi/agent/settings.json</span><span>默认模型</span></div>
+<pre><code>{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>Console 上新了某个模型但 Pi 里看不到？运行 <code>pi update --models</code> 刷新模型列表即可。Pi 本地缓存了一份模型目录，不会实时跟着 Console 变。</p>
+</aside>
+
+<h2>Console MCP</h2>
+<p>Pi 从 v0.99.0 起支持 MCP。添加 <a href="console-harnesses.html#console-mcp">Console MCP</a> 服务器，然后在浏览器中完成登录：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>Pi 的模型名写法是「提供商/模型」两段式：<code>opencode/claude-sonnet-5-5</code> 表示用 OpenCode 的按量付费通道跑 Claude Sonnet，<code>opencode-go/kimi-k3</code> 则表示用 Go 订阅的通道跑 Kimi。同一个模型可能同时存在于两个通道，前缀决定走哪条账——按量付费从工作区余额扣钱，Go 从订阅额度里扣。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

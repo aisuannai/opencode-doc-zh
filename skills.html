@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="skills" data-group="配置" data-src="https://opencode.ai/docs/skills/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Skills</h1>
+<p class="lede">Skill（技能）是一份可以反复使用的任务说明书：写一个 <code>SKILL.md</code> 放进 <code>.opencode/skills/&lt;skill-id&gt;</code>，在 <code>description</code> 里写清楚什么时候用，智能体就会在合适的时机自己加载它。</p>
+
+<div class="term-head"><span>.opencode/skills/git-release/SKILL.md</span><span>Markdown</span></div>
+<pre><code>---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.</code></pre>
+
+<p>当这个 skill 相关时，OpenCode 会把它「广告」给模型。智能体随后可以用 <code>skill</code> 工具加载它的指令内容——而不是把每个 skill 的全文都塞进每一条 prompt。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>Skill 就像公司的标准作业流程（SOP）手册：平时放在柜子里，只在封面写一句「适用场景」。员工（模型）干到相关任务时，翻开对应那本，按步骤执行。这比把所有手册内容都印在员工入职培训里（每条 prompt 全塞进去）要省得多、也精准得多。</p>
+</aside>
+
+<h2>创建</h2>
+<p>把相关的脚本、参考文档和模板和 <code>SKILL.md</code> 放在一起：</p>
+
+<div class="term-head"><span>text</span><span>目录结构</span></div>
+<pre><code>.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md</code></pre>
+
+<p>skill 里写的路径相对于包含 <code>SKILL.md</code> 的目录。推荐使用这种目录形式，因为它给配套文件一个私有的基准目录。</p>
+
+<h2>发现机制</h2>
+<p>OpenCode 会自动搜索这些位置：</p>
+
+<table>
+<thead>
+<tr><th>范围</th><th>来源</th></tr>
+</thead>
+<tbody>
+<tr><td>全局</td><td><code>~/.config/opencode/skills</code></td></tr>
+<tr><td>全局兼容目录</td><td><code>~/.claude/skills</code>、<code>~/.agents/skills</code></td></tr>
+<tr><td>项目</td><td><code>.opencode/skills</code></td></tr>
+<tr><td>项目兼容目录</td><td><code>.claude/skills</code>、<code>.agents/skills</code></td></tr>
+</tbody>
+</table>
+
+<p>对项目来源，OpenCode 从当前目录逐级向上搜索到项目根，每一级的匹配目录都会纳入。</p>
+
+<p>每个来源里可以放两种形式：</p>
+
+<div class="term-head"><span>text</span><span>单文件或目录</span></div>
+<pre><code>skills/
+├── review.md
+└── git-release/
+    └── SKILL.md</code></pre>
+
+<ul>
+<li>Markdown 文件必须位于来源根目录，如 <code>skills/review.md</code>。</li>
+<li>文件名恰好是 <code>SKILL.md</code> 的文件可以嵌套在分组目录里，如 <code>skills/git-release/SKILL.md</code> 或 <code>skills/teams/release/SKILL.md</code>。</li>
+<li>一个包含 <code>SKILL.md</code> 的目录算一个 skill。OpenCode 不会在它内部继续找更多 skill。</li>
+<li>隐藏文件、隐藏目录和 <code>node_modules</code> 会被跳过。</li>
+<li>搜索最多深入到来源根目录以下六层目录。</li>
+</ul>
+
+<h2>来源（Sources）</h2>
+<p>在任意 <code>opencode.json</code> 或 <code>opencode.jsonc</code> 里用 <code>skills</code> 数组添加更多本地目录或 HTTP 目录（catalog）：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>值</th><th>解析方式</th></tr>
+</thead>
+<tbody>
+<tr><td>相对路径</td><td>相对<strong>OpenCode 当前的工作目录</strong>，而不是配置文件所在目录</td></tr>
+<tr><td><code>~/</code> 路径</td><td>相对当前用户的主目录</td></tr>
+<tr><td>绝对路径</td><td>按原样使用</td></tr>
+<tr><td><code>http://</code> 或 <code>https://</code> URL</td><td>作为 HTTP 目录（catalog）加载</td></tr>
+</tbody>
+</table>
+
+<p>每一个被发现的配置文件都会贡献自己的条目；多个 <code>skills</code> 数组是合并关系，不是替换。</p>
+
+<p>已连接的 <a href="console.html">OpenCode Console</a> 工作区也可以共享 skill。</p>
+
+<h2>HTTP 目录（Catalogs）</h2>
+<p>一个 HTTP catalog 就是一个基础 URL 加一个 <code>index.json</code>：</p>
+
+<div class="term-head"><span>index.json</span><span>JSON</span></div>
+<pre><code>{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}</code></pre>
+
+<p>对于这个条目，OpenCode 会从 <code>&lt;base-url&gt;/git-release/&lt;file&gt;</code> 下载每个文件。</p>
+
+<table>
+<thead>
+<tr><th>规则</th><th>要求</th></tr>
+</thead>
+<tbody>
+<tr><td>路径</td><td>必须安全、相对、且与 index 同源（same-origin）</td></tr>
+<tr><td>条目文件</td><td>必须包含 <code>SKILL.md</code> 或 <code>&lt;name&gt;.md</code>，如 <code>git-release.md</code></td></tr>
+<tr><td>更新</td><td>文件变化时递增 <code>version</code>，OpenCode 才会刷新缓存</td></tr>
+</tbody>
+</table>
+
+<p>每个下载下来的 skill 目录都会成为一个以条目命名的来源根目录，所以 <code>git-release.md</code> 和 <code>SKILL.md</code> 的 ID 都是 <code>git-release</code>。</p>
+
+<h2>Frontmatter</h2>
+<p>用 frontmatter 给 skill 命名并控制它的出现方式：</p>
+
+<div class="term-head"><span>SKILL.md</span><span>Markdown</span></div>
+<pre><code>---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.</code></pre>
+
+<table>
+<thead>
+<tr><th>字段</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>name</code></td><td>显示名；默认取自路径推导出的 ID</td></tr>
+<tr><td><code>description</code></td><td>展示给模型的摘要，用于判断何时使用</td></tr>
+<tr><td><code>metadata.opencode/autoinvoke</code></td><td>设为 <code>false</code> 可以把 skill 从模型可用列表中移除</td></tr>
+<tr><td><code>disable-model-invocation</code></td><td>设为 <code>true</code>，效果同 <code>opencode/autoinvoke: false</code></td></tr>
+</tbody>
+</table>
+
+<p>运行时所有 frontmatter 都是可选的。希望模型能发现这个 skill 时，一定要写清楚 <code>description</code>；没有 description 的 skill 不会被「广告」出去。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>opencode/autoinvoke: false</code> 只是把 skill 从模型的可用列表里隐藏，skill 仍然处于注册状态，仍可以被显式按 ID 加载。同时设置 <code>disable-model-invocation</code> 和 <code>opencode/autoinvoke</code> 时，<code>opencode/autoinvoke</code> 优先。V2 接受 <code>license</code>、<code>compatibility</code> 等可移植性字段，但不会解释它们。</p>
+</aside>
+
+<h2>ID 规则</h2>
+<p>skill ID 由文件路径决定，frontmatter 里的 <code>name</code> 只是个显示标签。</p>
+
+<table>
+<thead>
+<tr><th>文件</th><th>ID</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&lt;source&gt;/git-release.md</code></td><td><code>git-release</code></td></tr>
+<tr><td><code>&lt;source&gt;/git-release/SKILL.md</code></td><td><code>git-release</code></td></tr>
+<tr><td><code>&lt;source&gt;/teams/release/SKILL.md</code></td><td><code>release</code></td></tr>
+</tbody>
+</table>
+
+<p>ID 是精确匹配且区分大小写的。想要 skill 可移植，建议用 1–64 个字符、全小写 kebab-case 的唯一 ID，并与目录名保持一致：</p>
+
+<div class="term-head"><span>text</span><span>推荐的正则</span></div>
+<pre><code>^[a-z0-9]+(-[a-z0-9]+)*$</code></pre>
+
+<p>V2 目前不强制这个正则、1–64 字符建议、<code>name</code> 与目录名一致，也不限制 description 长度。</p>
+
+<h2>优先级（Precedence）</h2>
+<p>skill 按 ID 选取。如果两个来源都定义了 <code>git-release</code>，<strong>后注册</strong>的来源提供的 skill 会被 OpenCode 加载：</p>
+
+<div class="term-head"><span>text</span><span>低优先级 ← 高优先级</span></div>
+<pre><code>~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded</code></pre>
+
+<p>来源按从低到高的优先级注册：</p>
+<ol>
+<li>内置 skill</li>
+<li><code>.claude/skills</code>，全局优先，然后从最远的祖先目录向当前目录</li>
+<li><code>.agents/skills</code>，全局优先，然后从最远的祖先目录向当前目录</li>
+<li><code>~/.config/opencode/skills</code></li>
+<li>项目的 <code>.opencode/skills</code>，从项目根向当前目录</li>
+<li>显式 <code>skills</code> 配置条目，按配置优先级和数组顺序</li>
+</ol>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>除非你确实想覆盖先前的 skill，否则不要制造重复 ID——重名不会报错，而是悄悄替换，排查起来很麻烦。</p>
+</aside>
+
+<h2>加载过程</h2>
+<p>在每一步模型调用时，OpenCode 会列出所有<strong>有 description 且没有把 <code>opencode/autoinvoke</code> 设为 <code>false</code></strong> 的已许可 skill。列表只包含 ID、名称和 description，不包含 Markdown 正文。</p>
+
+<p>模型用精确 ID 调用 <code>skill</code> 工具来加载一个 skill：</p>
+
+<div class="term-head"><span>skill tool input</span><span>JSON</span></div>
+<pre><code>{
+  "id": "git-release"
+}</code></pre>
+
+<p>OpenCode 随后：</p>
+<ol>
+<li>选出该 ID 当前的定义。</li>
+<li>检查所选智能体的 <code>skill</code> 权限。</li>
+<li>把 Markdown 正文（不含 frontmatter）加入对话。</li>
+<li>提供 skill 的基准目录，以及最多十个配套文件的路径样本。</li>
+</ol>
+
+<p>想自己手动加载，在 prompt 里提到 <code>@skill-id</code> 即可。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>配套文件的内容<strong>不会自动加载</strong>——智能体会按 skill 正文的指示去读它们。文件路径样本只有目录式（含 <code>SKILL.md</code>）的 skill 才有；扁平的单文件 Markdown skill 不会收到相邻文件列表。所以复杂 skill 优先用目录形式。</p>
+</aside>
+
+<h2>权限（Permissions）</h2>
+<p>用 <code>skill</code> 动作、skill ID 作为资源。规则按顺序运行，最后一条匹配的规则胜出：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>效果</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>allow</code></td><td>广告展示并加载匹配的 skill，无需批准</td></tr>
+<tr><td><code>ask</code></td><td>广告展示匹配的 skill，加载前先询问</td></tr>
+<tr><td><code>deny</code></td><td>对模型隐藏匹配的 skill，并拒绝加载</td></tr>
+</tbody>
+</table>
+
+<p>把同样的规则放到 <code>agents.&lt;id&gt;.permissions</code> 下，可以让它们只作用于某个智能体。</p>
+
+<h2>排查问题（Troubleshooting）</h2>
+<p>比如下面这个 skill 的 ID 是 <code>release</code>，而不是 frontmatter 里的名字 <code>Git Release</code>：</p>
+
+<div class="term-head"><span>text</span><span>路径 → ID</span></div>
+<pre><code>.opencode/skills/release/SKILL.md
+                      └─ ID: release</code></pre>
+
+<p>如果某个 skill 找不到，或者加载了错误的内容，按以下步骤排查：</p>
+<ol>
+<li>确认文件要么是根级的 <code>*.md</code>，要么是嵌套的、文件名<strong>恰好</strong>为 <code>SKILL.md</code> 的文件。</li>
+<li>检查路径推导出的、区分大小写的 ID，而不是 frontmatter 的 <code>name</code>。</li>
+<li>如果希望模型发现它，加上 <code>description</code>。</li>
+<li>检查 <code>opencode/autoinvoke</code> 设置和所选智能体的 <code>skill</code> 权限。</li>
+<li>看看是否有后注册的来源定义了相同 ID。</li>
+<li>对于 HTTP catalog，检查 <code>index.json</code>、同源文件路径，以及 <code>version</code> 是否已更新。</li>
+</ol>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

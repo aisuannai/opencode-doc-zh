@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>格式化器 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="formatters" data-group="配置" data-src="https://opencode.ai/docs/formatters/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>格式化器</h1>
+<p class="lede">OpenCode 可以在 <code>write</code>、<code>edit</code>、<code>patch</code> 工具改动文件之后自动格式化。格式化器（Formatter）默认关闭，需要在配置里手动启用。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>智能体改完代码后，格式可能不太整齐（缩进、引号风格、换行）。格式化器就像一个「自动整理工位」的助手：每次 AI 写完或改完文件，OpenCode 会悄悄调用 Prettier、gofmt 这类工具把文件重新排一遍。你看到的永远是符合项目风格的代码，而不用在 review 时纠正 AI 的缩进。</p>
+</aside>
+
+<h2>启用</h2>
+<p>把 <code>formatter</code> 设为 <code>true</code>，即可启用全部内置格式化器。内置格式化器只有在对应的可执行文件和项目要求都就绪时才会真正运行。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}</code></pre>
+<p>把 <code>formatter</code> 写成对象也能启用内置格式化器，同时还可以覆盖它们、或添加自定义格式化器。空对象 <code>{}</code> 表示保留继承来的格式化器设置；而 <code>true</code> 表示重置为内置的那套。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>格式化器<strong>默认是关闭的</strong>。也就是说，即使你项目里装了 Prettier，不配置 <code>formatter</code> 时 OpenCode 也不会自动跑它。另外，内置格式化器是「按需触发」的：对应的命令（如 <code>gofmt</code>）不存在或项目依赖没装时，它会静默跳过，不会报错打断你。</p>
+</aside>
+
+<h2>内置格式化器</h2>
+<p>OpenCode 内置了下面这些格式化器定义。大多数要求对应命令可用；有额外检测规则的会在表里列出。</p>
+<table>
+<thead>
+<tr><th>格式化器</th><th>扩展名</th><th>前提条件</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gofmt</code></td><td><code>.go</code></td><td><code>gofmt</code> 命令</td></tr>
+<tr><td><code>mix</code></td><td><code>.ex</code>、<code>.exs</code>、<code>.eex</code>、<code>.heex</code>、<code>.leex</code>、<code>.neex</code>、<code>.sface</code></td><td><code>mix</code> 命令</td></tr>
+<tr><td><code>oxfmt</code></td><td><code>.js</code>、<code>.jsx</code>、<code>.mjs</code>、<code>.cjs</code>、<code>.ts</code>、<code>.tsx</code>、<code>.mts</code>、<code>.cts</code></td><td><code>package.json</code> 里有 <code>oxfmt</code> 依赖</td></tr>
+<tr><td><code>prettier</code></td><td><code>.js</code>、<code>.jsx</code>、<code>.mjs</code>、<code>.cjs</code>、<code>.ts</code>、<code>.tsx</code>、<code>.mts</code>、<code>.cts</code>、<code>.html</code>、<code>.htm</code>、<code>.css</code>、<code>.scss</code>、<code>.sass</code>、<code>.less</code>、<code>.vue</code>、<code>.svelte</code>、<code>.json</code>、<code>.jsonc</code>、<code>.yaml</code>、<code>.yml</code>、<code>.toml</code>、<code>.xml</code>、<code>.md</code>、<code>.mdx</code>、<code>.graphql</code>、<code>.gql</code></td><td><code>package.json</code> 里有 <code>prettier</code> 依赖</td></tr>
+<tr><td><code>biome</code></td><td>与上面 <code>prettier</code> 相同的扩展名</td><td>存在 <code>biome.json</code> 或 <code>biome.jsonc</code>，且安装了 <code>@biomejs/biome</code> 可执行文件</td></tr>
+<tr><td><code>zig</code></td><td><code>.zig</code>、<code>.zon</code></td><td><code>zig</code> 命令</td></tr>
+<tr><td><code>clang-format</code></td><td><code>.c</code>、<code>.cc</code>、<code>.cpp</code>、<code>.cxx</code>、<code>.c++</code>、<code>.h</code>、<code>.hh</code>、<code>.hpp</code>、<code>.hxx</code>、<code>.h++</code>、<code>.ino</code>、<code>.C</code>、<code>.H</code></td><td><code>clang-format</code> 命令且存在 <code>.clang-format</code> 文件</td></tr>
+<tr><td><code>ktlint</code></td><td><code>.kt</code>、<code>.kts</code></td><td><code>ktlint</code> 命令</td></tr>
+<tr><td><code>ruff</code></td><td><code>.py</code>、<code>.pyi</code></td><td><code>ruff</code> 命令，且有 Ruff 配置文件或依赖声明</td></tr>
+<tr><td><code>air</code></td><td><code>.R</code></td><td><code>air</code> 命令，且能自证是 R 格式化器</td></tr>
+<tr><td><code>uv</code></td><td><code>.py</code>、<code>.pyi</code></td><td><code>uv</code> 命令，且支持 <code>uv format</code></td></tr>
+<tr><td><code>rubocop</code></td><td><code>.rb</code>、<code>.rake</code>、<code>.gemspec</code>、<code>.ru</code></td><td><code>rubocop</code> 命令</td></tr>
+<tr><td><code>standardrb</code></td><td><code>.rb</code>、<code>.rake</code>、<code>.gemspec</code>、<code>.ru</code></td><td><code>standardrb</code> 命令</td></tr>
+<tr><td><code>htmlbeautifier</code></td><td><code>.erb</code></td><td><code>htmlbeautifier</code> 命令</td></tr>
+<tr><td><code>dart</code></td><td><code>.dart</code></td><td><code>dart</code> 命令</td></tr>
+<tr><td><code>ocamlformat</code></td><td><code>.ml</code>、<code>.mli</code></td><td><code>ocamlformat</code> 命令且存在 <code>.ocamlformat</code> 文件</td></tr>
+<tr><td><code>terraform</code></td><td><code>.tf</code>、<code>.tfvars</code></td><td><code>terraform</code> 命令</td></tr>
+<tr><td><code>latexindent</code></td><td><code>.tex</code></td><td><code>latexindent</code> 命令</td></tr>
+<tr><td><code>gleam</code></td><td><code>.gleam</code></td><td><code>gleam</code> 命令</td></tr>
+<tr><td><code>shfmt</code></td><td><code>.sh</code>、<code>.bash</code></td><td><code>shfmt</code> 命令</td></tr>
+<tr><td><code>nixfmt</code></td><td><code>.nix</code></td><td><code>nixfmt</code> 命令</td></tr>
+<tr><td><code>rustfmt</code></td><td><code>.rs</code></td><td><code>rustfmt</code> 命令</td></tr>
+<tr><td><code>pint</code></td><td><code>.php</code></td><td><code>composer.json</code> 里有 <code>laravel/pint</code></td></tr>
+<tr><td><code>ormolu</code></td><td><code>.hs</code></td><td><code>ormolu</code> 命令</td></tr>
+<tr><td><code>cljfmt</code></td><td><code>.clj</code>、<code>.cljs</code>、<code>.cljc</code>、<code>.edn</code></td><td><code>cljfmt</code> 命令</td></tr>
+<tr><td><code>dfmt</code></td><td><code>.d</code></td><td><code>dfmt</code> 命令</td></tr>
+</tbody>
+</table>
+<p>举个例子：启用内置格式化器后，OpenCode 会自动发现并使用项目本地的 Prettier 依赖来处理匹配的文件：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "formatter": true,
+}</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>注意这张表的「前提条件」一列的两种模式：命令行工具（如 <code>gofmt</code>）要求装在系统 PATH 里；而 Prettier、Biome 这类则优先用<strong>项目本地依赖</strong>（<code>node_modules</code> 里的），保证用的是项目锁定的版本，而不是全局装的那份。所以「装了但版本不对」的问题基本不会出现。</p>
+</aside>
+
+<h2>自定义</h2>
+<p>在 <code>formatter</code> 对象里加一个具名条目，就可以覆盖内置格式化器或定义自定义格式化器。自定义格式化器必须同时提供 <code>command</code> 和 <code>extensions</code> 才能运行。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}</code></pre>
+<table>
+<thead>
+<tr><th>字段</th><th>类型</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>disabled</code></td><td><code>boolean</code></td><td>为 <code>true</code> 时移除这个具名格式化器。</td></tr>
+<tr><td><code>command</code></td><td><code>string[]</code></td><td>替换内置命令，或定义自定义命令。</td></tr>
+<tr><td><code>environment</code></td><td><code>Record&lt;string, string&gt;</code></td><td>追加环境变量，父级环境变量仍然保留。</td></tr>
+<tr><td><code>extensions</code></td><td><code>string[]</code></td><td>替换内置扩展名列表，或定义自定义列表。要带上前导点。</td></tr>
+</tbody>
+</table>
+<p>所有字段都是可选的。覆盖内置条目时，省略的字段沿用内置值；而一个新建条目如果没给 <code>command</code> 或 <code>extensions</code>，就无法运行。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}</code></pre>
+
+<h3>命令</h3>
+<p><code>command</code> 是一个参数数组，不是 shell 命令字符串。OpenCode 会把 <code>$FILE</code> 替换成文件的绝对路径，并在当前项目目录下执行这条命令。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>不要把命令写成 <code>"command": "prettier --write $FILE"</code> 这样的整串字符串——它必须是<strong>数组</strong>。写成字符串会导致参数解析失败。另外 <code>$FILE</code> 是 OpenCode 替换的占位符，写的时候要原样保留，别自己填上真实路径。</p>
+</aside>
+
+<h3>匹配规则</h3>
+<p>OpenCode 用文件的<strong>最终扩展名</strong>与 <code>extensions</code> 对比。匹配区分大小写；像 <code>.part.md</code> 这类复合后缀，最终扩展名是 <code>.md</code>，所以不会匹配 <code>extensions</code> 里写了 <code>.part.md</code> 的条目。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}</code></pre>
+<p>当多个格式化器都匹配同一个文件时，OpenCode 按注册顺序依次尝试，第一条命令成功后就停止。内置格式化器保持内置顺序；自定义条目按对象里的书写顺序排在后面。如果某条命令退出时失败，OpenCode 会记录失败并尝试下一个匹配项。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>可以把匹配想象成「抢工作」：文件一改完，所有扩展名对得上的格式化器排成一队，前面的先上，成功了后面的人就回家。所以想让某个格式化器优先，把它写在对象靠前的位置即可；排在后面的自动变成兜底方案。</p>
+</aside>
+
+<h2>禁用</h2>
+<p>如果任何配置文件都没有设置 <code>formatter</code>，格式化就是关闭状态。要禁用某个低优先级文件启用的格式化，把它设为 <code>false</code>：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}</code></pre>
+<p>如果只想禁用某个内置格式化器、其余保持启用，把它的具名条目标记为 disabled：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>OpenCode 的配置支持多文件继承（全局配置 → 项目配置逐层覆盖），格式化器也遵守这套规则：<code>true</code> 重置为内置、<code>{}</code> 保留继承、<code>false</code> 整体关掉。调试格式化问题时，先用 <code>opencode debug config</code> 看看最终生效的配置是什么，能省掉很多「为什么没生效」的困惑。详见 <a href="config.html">配置</a>一章。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

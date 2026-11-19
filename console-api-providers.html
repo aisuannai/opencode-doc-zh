@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API · 提供商 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-api-providers" data-group="Console" data-src="https://opencode.ai/docs/console/api/providers/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>API · 提供商</h1>
+<p class="lede">你接入工作区的每个提供商（provider）都通过 Console 网关、以各自的 URL 对外服务。OpenCode 在执行 <code>/connect</code> 之后会自动使用它；你也可以直接调用，从而在自己的工具里用上同样的提供商。</p>
+
+<div class="term-head"><span>bash</span><span>最小可运行示例</span></div>
+<pre><code>curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>这个 API 本质上是一个「带钥匙的快递中转站」：你把请求寄到 Console 网关（<code>https://opencode.ai/inference/custom/&lt;connection_id&gt;</code>），Console 在转发前<strong>替你塞进真正的提供商密钥</strong>，再原样送到提供商那里。好处有二：一是你自己的工具不用管理各家密钥，只用一个 OpenCode key；二是提供商的机密凭证<strong>永远不会离开工作区</strong>，泄密面大幅缩小。</p>
+</aside>
+
+<h2>提供商 URL（Provider URL）</h2>
+<p>在 <strong>Providers</strong> 下的提供商页面里，复制它的 <strong>Console API URL</strong>：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>https://opencode.ai/inference/custom/&lt;connection_id&gt;</code></pre>
+
+<h2>认证（Authentication）</h2>
+<p>把 <code>&lt;token&gt;</code> 替换为在 Console 中创建的<a href="console-api.html#service-accounts">服务账号 key</a>。Console 在转发之前会把它换成该连接自己的凭证：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Authorization: Bearer &lt;token&gt;</code></pre>
+
+<p>Console 也能从 <code>x-api-key</code>、<code>api-key</code> 或 <code>x-goog-api-key</code> 读取 key，所以把提供商官方 SDK 的 base URL 指向 Console API URL 也能直接工作。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>两个易错点：<strong>一</strong>，认证用的必须是 OpenCode 的 key（个人 key 或服务账号 key），千万别在这里填提供商自己的密钥——它会由网关在转发时自动注入；<strong>二</strong>，请求体里的 <code>model</code> 要写提供商页面上显示的模型 ID。当模型在上游（提供商原生 API）使用不同的 API ID 时，Console 会自动改写，但未在该连接上启用的模型会被直接拒绝。</p>
+</aside>
+
+<h2>端点（Endpoints）</h2>
+<p>把提供商的 API 路径拼接到 Console API URL 后面即可。Console 会把请求转发到该连接的 base URL，并<strong>原封不动地</strong>返回提供商的响应：</p>
+
+<table>
+<thead>
+<tr><th>格式</th><th>路径</th></tr>
+</thead>
+<tbody>
+<tr><td>Chat Completions</td><td><code>/chat/completions</code></td></tr>
+<tr><td>Responses API</td><td><code>/responses</code></td></tr>
+<tr><td>Anthropic Compatible</td><td><code>/messages</code></td></tr>
+<tr><td>Google Generative AI</td><td><code>/models/&lt;model&gt;:generateContent</code></td></tr>
+</tbody>
+</table>
+
+<h3>Chat Completions</h3>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'</code></pre>
+
+<h3>Responses API</h3>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'</code></pre>
+
+<h3>Anthropic Compatible</h3>
+<p>注意 <code>max_tokens</code> 是必填项：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'</code></pre>
+
+<h3>Google Generative AI</h3>
+<p>模型名和方法名都在路径里。把 <code>:generateContent</code> 换成 <code>:streamGenerateContent</code> 即可流式接收响应：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>由于 Console 返回的是「提供商响应原样」，你可以把现有代码里指向 <code>api.openai.com</code> / Anthropic / Gemini 的 base URL 直接换成 Console API URL，其余逻辑零改动。四种格式（Chat Completions、Responses、Anthropic Compatible、Google Generative AI）覆盖了主流 SDK 的接入姿势，等于一次接入、处处可用。</p>
+</aside>
+
+<h2>用量（Usage）</h2>
+<p>请求会按每个模型上设定的价格计入<a href="console-budgets.html">预算（budgets）</a>。token 费用由提供商直接向你收取。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>计费是「两条腿」：提供商按它自己的价目表向你的账户（也就是连接里配置的那个账号）收 token 钱；同时 Console 会按模型上标定的价格把用量记到你工作区的预算里，方便控制和审计。也就是说，走这个 API 花的是<strong>提供商侧</strong>的钱，占的是<strong>你工作区预算</strong>的额度，两本账要分开看。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

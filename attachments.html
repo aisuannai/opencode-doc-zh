@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>附件 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="attachments" data-group="配置" data-src="https://opencode.ai/docs/attachments/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>附件</h1>
+<p class="lede">把本地文件作为附件（Attachment）挂到提示词里，让 OpenCode 直接基于它回答：总结 README、看图写代码、读 PDF 出结论，都靠这一节讲的东西。</p>
+
+<h2>附加文件</h2>
+<p>先附加本地文件，然后在提示词里让 OpenCode 使用它。在桌面端或 Web 客户端里，点 <strong>Attach file</strong>（附加文件）、直接粘贴文件、或把它拖进输入框。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Summarize the attached README.md and list the required setup steps.</code></pre>
+<p>桌面端文件选择器一次最多可选共 20 MiB 的文件；其它界面可能有更低的客户端上限。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>附加图片前，先确认当前模型<strong>支持图片输入</strong>。OpenCode 能把受支持的图片传给提供商，但提供商和模型自己仍然会检查格式、尺寸、文件数量和大小限制。纯文本模型可能直接拒绝带图请求。</p>
+</aside>
+
+<h2>语法</h2>
+<p>V2 的提示词和命令输入用 <code>uri</code> 描述一个附件，可选 <code>name</code> 和 <code>description</code>：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "uri": "file:///home/me/project/src/server.ts",
+  "name": "server.ts",
+  "description": "HTTP server entrypoint"
+}</code></pre>
+<p>对服务器可访问的文件或目录，使用绝对 <code>file:</code> URL。对文本文件，正数的 <code>start</code> 和 <code>end</code> 参数可以选取行号（从 1 开始）范围内的内容：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>file:///home/me/project/src/server.ts?start=20&amp;end=60</code></pre>
+<p>用 <code>data:</code> URL 可以把内容内联发送：</p>
+<div class="term-head"><span>json</span><span></span></div>
+<pre><code>{
+  "uri": "data:text/plain;base64,SGVsbG8sIE9wZW5Db2RlIQ==",
+  "name": "greeting.txt"
+}</code></pre>
+<p>不支持 HTTP / HTTPS 的附件 URL。程序化提交提示词请见生成的 <a href="https://opencode.ai/docs/api/" target="_blank" rel="noopener">API 参考</a>。</p>
+
+<h2>支持的格式</h2>
+<p>当前 V2 会话会把以下附件类型以可见形式交给模型：</p>
+<table>
+<thead>
+<tr><th>输入</th><th>模型收到</th><th>示例</th></tr>
+</thead>
+<tbody>
+<tr><td>UTF-8 文本文件</td><td>文件名 + 解码后的文本</td><td><code>README.md</code></td></tr>
+<tr><td>目录</td><td>直接子级文件和目录的非递归列表</td><td><code>file:///home/me/</code></td></tr>
+<tr><td>PNG、JPEG、GIF 或 WebP</td><td>图片媒体</td><td><code>diagram.png</code></td></tr>
+<tr><td>PDF</td><td>文档媒体</td><td><code>report.pdf</code></td></tr>
+</tbody>
+</table>
+<p>PDF 需要支持 PDF 输入的模型。如果模型不支持某种附件类型，OpenCode 会用一段简短说明文字代替它。</p>
+<p>SVG 按文本处理。AVIF、BMP、音频、视频以及其它二进制提示词附件不会进入模型请求。先把不支持的二进制转换成文本或受支持的图片再附加——比如 BMP 图片应先转成 PNG。</p>
+<p>OpenCode 会在提示词进入会话前读取每个附件，并拒绝以下情况：无效的 URL、读不了的路径、既不是文件也不是目录的路径、解码后超过 20 MiB 的附件。媒体类型按<strong>字节内容</strong>检测，所以改文件名或改 <code>data:</code> URL 的媒体类型，都无法让不受支持的二进制「伪装」成功。</p>
+
+<h2>图片设置</h2>
+<p>在 <code>opencode.json</code> / <code>opencode.jsonc</code> 里配置图片归一化：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}</code></pre>
+<p>所有字段都是可选的：</p>
+<table>
+<thead>
+<tr><th>字段</th><th>默认值</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>auto_resize</code></td><td><code>true</code></td><td>超过限制的图片自动缩放；设为 <code>false</code> 时直接拒绝该图片。</td></tr>
+<tr><td><code>max_width</code></td><td><code>2000</code></td><td>最大宽度（像素），必须为正整数。</td></tr>
+<tr><td><code>max_height</code></td><td><code>2000</code></td><td>最大高度（像素），必须为正整数。</td></tr>
+<tr><td><code>max_base64_bytes</code></td><td><code>5242880</code></td><td>Base64 编码后的最大字节数，必须为正整数。</td></tr>
+</tbody>
+</table>
+<p>比如，下面这组设置会把宽于 1200 像素的图片直接拒绝而不是缩放：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "media": {
+    "image": {
+      "auto_resize": false,
+      "max_width": 1200,
+    },
+  },
+}</code></pre>
+<p>这些设置同时作用于两类图片：用户附加到提示词里的受支持图片，以及内置 <code>read</code> 工具返回的图片。</p>
+
+<h2>处理流程</h2>
+<p><code>read</code> 工具按字节内容识别 PNG、JPEG、GIF 和 WebP，最多读取 20 MiB 的原始图片数据，并按配置的图片限制检查宽、高和 Base64 长度。</p>
+<p><code>auto_resize: true</code> 时，OpenCode 保持宽高比，把图片缩到尺寸上限以内，然后逐级尝试更小的 PNG 和 JPEG 编码，直到满足 Base64 上限——所以输出的媒体类型可能变化。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Input:  4000 × 2000 WebP
+Limits: 2000 × 2000
+Output: 2000 × 1000 PNG or JPEG</code></pre>
+<p>如果没有任何编码能满足限制，处理就失败。设为 <code>auto_resize: false</code> 时，超过任一限制的图片原样拒绝；无法解码的图片同样失败。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Input:  2400 × 1600 JPEG
+Limit:  max_width = 2000, auto_resize = false
+Result: Image processing fails</code></pre>
+<p>如果图片缩放器不可用，OpenCode 会原样传递图片。因此图片设置是<strong>处理上限</strong>，不是上传边界或安全边界。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>图片为什么要「归一化」？因为大多数模型对图片输入有尺寸和 token 开销限制：一张 4000×2000 的截图直接喂进去，要么被模型拒绝，要么烧掉大量 token。OpenCode 的做法像「登机行李托运」——超规格的行李帮你压缩到可托运的尺寸再送上飞机（<code>auto_resize: true</code>），或者干脆在值机口拒绝（<code>auto_resize: false</code>）。默认策略是前者，尽量别让你的图半路被退回来。</p>
+</aside>
+
+<h2>限制一览</h2>
+<table>
+<thead>
+<tr><th>限制项</th><th>取值或行为</th><th>示例</th></tr>
+</thead>
+<tbody>
+<tr><td>直接附件</td><td>每项解码后 20 MiB；客户端可能有更低限制</td><td>两个 12 MiB 文件可各自通过单项限制</td></tr>
+<tr><td>桌面端选择器</td><td>一次选择总共 20 MiB</td><td>两个 12 MiB 文件超过选择上限</td></tr>
+<tr><td><code>max_base64_bytes</code></td><td>只计编码后的 Base64，不含完整 <code>data:</code> URL 前缀</td><td><code>SGVsbG8=</code> 算 8 字节</td></tr>
+<tr><td>提供商图片限制</td><td>在 OpenCode 处理之后再应用</td><td>提供商可能拒绝已被 OpenCode 接受的图片</td></tr>
+<tr><td>文本附件的模型要求</td><td>不要求多模态模型</td><td><code>notes.txt</code> 以提示词文本形式插入</td></tr>
+<tr><td><code>read</code> 的文本限制</td><td>使用独立的分页与截断限制</td><td>大日志文件分页读取</td></tr>
+</tbody>
+</table>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><strong>客户端接受了文件 ≠ 内容真的进了模型。</strong>附件必须是模型可见的格式，并且同时满足 OpenCode 和提供商两边的限制，内容才会真正到达模型。排查「AI 说没看到图」时，按这个顺序检查：模型是否支持该类型 → 文件是否超过 20 MiB → 是否被 <code>auto_resize: false</code> 拒掉 → 提供商自身限制。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

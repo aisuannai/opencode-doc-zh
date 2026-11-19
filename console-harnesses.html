@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harnesses · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-harnesses" data-group="Console" data-src="https://opencode.ai/docs/console/harnesses/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Harnesses</h1>
+<p class="lede">Console 不仅能配合 OpenCode，也能配合其它编码智能体使用。把一个 Harness（接入层）指向 Console 网关并配好 API key，就能使用所有付费模型或 Go 模型，用量照常计入你的工作区。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>「Harness」直译是「马具」——把现成的编码工具（比如 Claude Code、Codex）「套上缰绳」，接到 OpenCode 的模型供给上：工具还是那个工具、交互习惯不变，但底层跑的模型变成了你工作区里的付费模型或 Go 订阅模型。一次配置，既有大厂工具的体验，又有 Console 的计费、策略（policies）和 MCP 服务器托管，两全其美。</p>
+</aside>
+
+<table>
+<thead>
+<tr><th>Harness</th><th>按量付费（Pay-as-you-go）</th><th>Go</th><th>MCP</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="h-claude-code.html">Claude Code</a></td><td>支持</td><td>支持</td><td>支持</td></tr>
+<tr><td><a href="h-codex.html">Codex</a></td><td>支持</td><td>支持</td><td>支持</td></tr>
+<tr><td><a href="h-hermes.html">Hermes</a></td><td>内置</td><td>内置</td><td>支持</td></tr>
+<tr><td><a href="h-pi.html">Pi</a></td><td>内置</td><td>内置</td><td>支持</td></tr>
+<tr><td><a href="h-raycast.html">Raycast</a></td><td>扩展（Extension）</td><td>扩展（Extension）</td><td>支持</td></tr>
+</tbody>
+</table>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>免费档的 chat 模型<strong>只能在 OpenCode 客户端内使用</strong>。其它 Harness 即使带着 Console API key 访问这些模型，也会收到 HTTP <code>403</code>。想在第三方工具里跑，请使用付费模型或 Go 订阅。</p>
+</aside>
+
+<h2>Console CLI</h2>
+<p><a href="https://github.com/anomalyco/opencode-console-cli" target="_blank" rel="noopener">Console CLI</a> 可以用一条命令把 Harness 连接到你的工作区。它需要 Node.js 22 或更高版本。</p>
+
+<table>
+<thead>
+<tr><th>Harness</th><th>命令</th></tr>
+</thead>
+<tbody>
+<tr><td>Claude Code</td><td><code>npx @opencode/console setup claude-code</code></td></tr>
+<tr><td>Codex</td><td><code>npx @opencode/console setup codex</code></td></tr>
+<tr><td>Hermes</td><td><code>npx @opencode/console setup hermes</code></td></tr>
+<tr><td>Pi</td><td><code>npx @opencode/console setup pi</code></td></tr>
+<tr><td>DeepSeek Harness</td><td><code>npx @opencode/console setup deepseek-harness</code></td></tr>
+</tbody>
+</table>
+
+<p>执行后浏览器会打开 Console，你在里面批准登录并选择工作区。之后这个 Harness 就会获得：</p>
+<ul>
+<li>工作区的模型，经由 Console 提供</li>
+<li>工作区的策略（policies），在每次工具调用之前检查</li>
+<li>工作区的 MCP 服务器、Skills 和指令文件（instructions）</li>
+</ul>
+
+<p>CLI 会持续让 Harness 与工作区保持同步，并自动更新自身。</p>
+
+<p>如果想让 Harness 保留<strong>它自己的登录方式和模型</strong>（比如你的 Claude 或 ChatGPT 订阅），加上 <code>--keep-provider</code>。Harness 仍会获得工作区的策略、MCP 服务器、Skills 和指令文件。此选项适用于 Claude Code、Codex 和 Hermes：</p>
+
+<div class="term-head"><span>bash</span><span>保留自带订阅</span></div>
+<pre><code>npx @opencode/console setup codex --keep-provider</code></pre>
+
+<p>想手动配置某个 Harness，或者 CLI 还不支持的 Harness，可以用 API key 加下文的 base URL。</p>
+
+<h2>获取 API key</h2>
+<p>Harness 用 Console API key 认证。最快捷的选择是<a href="console-api.html#personal-api-keys">个人 API key</a>，它会以你的身份调用模型：</p>
+<ol>
+<li>在 <a href="https://opencode.ai/console" target="_blank" rel="noopener">Console</a> 的账号菜单里打开 <strong>Account</strong>。</li>
+<li>在 <strong>Personal API keys</strong> 下，点击 <strong>Add API key</strong>。</li>
+<li>选择工作区、给 key 起名，点击 <strong>Create</strong>。</li>
+<li>复制 key。它<strong>只显示这一次</strong>。</li>
+</ol>
+
+<div class="term-head"><span>text</span><span>key 的样例格式</span></div>
+<pre><code>oc_sk_1a2b3c4d5e6f_...</code></pre>
+
+<p>用量会计入你的<a href="console-budgets.html#member-budgets">成员预算（member budget）</a>。要按量付费，请用<strong>有额度（credits）的工作区</strong>的 key；要用 Go，请用<strong>订阅了 <a href="console-go.html">Go</a> 的工作区</strong>的 key。</p>
+
+<p>在共享机器或 CI 上，Owner 和管理员可以改用<a href="console-api.html#service-accounts">服务账号（service account）</a>的 key，这样用量就不会绑在某一个人身上。</p>
+
+<h2>Base URL</h2>
+<p>按量付费和 Go 使用不同的 base URL，按你的套餐选用：</p>
+
+<table>
+<thead>
+<tr><th>套餐</th><th>Base URL</th></tr>
+</thead>
+<tbody>
+<tr><td>按量付费（Pay-as-you-go）</td><td><code>https://opencode.ai/inference</code></td></tr>
+<tr><td>Go</td><td><code>https://opencode.ai/inference/go</code></td></tr>
+</tbody>
+</table>
+
+<p>再拼接上你的 Harness 所讲的那套 API 的路径。每一种 API 都能访问<strong>所有</strong>付费和 Go 文本模型：模型原生支持该 API 时，Console 直接发给它自己的端点；不支持时，Console 会做协议翻译。</p>
+
+<table>
+<thead>
+<tr><th>API</th><th>路径</th></tr>
+</thead>
+<tbody>
+<tr><td>OpenAI Responses</td><td><code>/openai/v1/responses</code></td></tr>
+<tr><td>OpenAI Chat Completions</td><td><code>/openai/v1/chat/completions</code></td></tr>
+<tr><td>Anthropic Messages</td><td><code>/anthropic/v1/messages</code></td></tr>
+<tr><td>Gemini</td><td><code>/google/v1beta/models/&lt;model&gt;:generateContent</code></td></tr>
+</tbody>
+</table>
+
+<p>拼出来的完整地址形如：</p>
+
+<div class="term-head"><span>text</span><span>Go 订阅 + Chat Completions 的组合示例</span></div>
+<pre><code>https://opencode.ai/inference/go/openai/v1/chat/completions</code></pre>
+
+<h2>会话（Sessions）</h2>
+<p>每个请求都带上一个<strong>稳定的会话 ID</strong>，这样 Console 才能把同一段对话一致地路由，并复用它的提示缓存（prompt cache）。<a href="console-go.html#where-can-i-use-it">Go 要求必须带</a>：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>x-opencode-session: ses_...</code></pre>
+
+<p>Console 也能识别 Claude Code、Codex、Hermes 和 Pi 自带的原生会话 header，所以这些 Harness 无需额外配置。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>为什么会话 ID 重要？推理网关常用「提示缓存」省钱：同一对话的前缀内容只需处理一次，后续请求命中缓存就能大幅降低成本和延迟。要让缓存命中，同一段对话的请求必须被路由到同一处、并携带一致的会话标识——这就是 <code>x-opencode-session</code> 的作用。在 Go 套餐下它是硬性要求，缺了可能直接被拒。</p>
+</aside>
+
+<h2>Console MCP</h2>
+<p>支持 MCP 的 Harness 可以通过 Console MCP 服务器管理你的工作区。它使用 OAuth 动态客户端注册，你直接在浏览器里登录即可，不用粘贴 key：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>https://opencode.ai/console/mcp</code></pre>
+
+<p>每个 Harness 的页面都说明了如何添加它。当你的工作区启用该服务器时，OpenCode 会自动把它添加为 <code>opencode_console</code>，并在首次使用时请你从浏览器登录。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

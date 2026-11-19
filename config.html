@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>配置 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="config" data-group="开始" data-src="https://opencode.ai/docs/config/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>配置</h1>
+<p class="lede">在项目里创建 <code>opencode.jsonc</code> 即可配置 OpenCode。建议加上 schema 让编辑器自动校验，然后只写你需要的选项。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>配置文件就是 OpenCode 的「总控制台」：默认用哪个模型、允许它执行哪些命令、启用哪些 MCP 服务器——所有开关都集中在这一个 JSON 里。它支持多层覆盖：机器级 → 用户级 → 项目级，一层比一层具体，就像浏览器设置的「系统默认 → 用户偏好 → 站点例外」。</p>
+</aside>
+
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}</code></pre>
+<p>也可以让 OpenCode 替你更新这个文件。</p>
+
+<h2>格式</h2>
+<p>OpenCode 支持 JSON 和 JSONC。想要注释或尾逗号就用 JSONC：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-5-5",
+}</code></pre>
+
+<h2>配置位置</h2>
+<p>把机器级的托管设置放进系统配置目录：</p>
+<table>
+<thead>
+<tr><th>平台</th><th>目录</th></tr>
+</thead>
+<tbody>
+<tr><td>macOS</td><td><code>/Library/Application Support/opencode</code></td></tr>
+<tr><td>Linux</td><td><code>/etc/opencode</code></td></tr>
+<tr><td>Windows</td><td><code>%ProgramData%\opencode</code></td></tr>
+</tbody>
+</table>
+<p>系统目录的用法与全局目录相同。除了 <code>opencode.json(c)</code>，它还会为机器上的每个用户加载 <code>agents/</code>、<code>commands/</code>、<code>skills/</code> 和 <code>plugins/</code>：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md</code></pre>
+<p>在 macOS 上，OpenCode 还会读取 MDM 工具为 <code>ai.opencode.managed</code> 域下发的托管偏好。用户级的 profile 会取代机器级的那份：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/Library/Managed Preferences/&lt;user&gt;/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist</code></pre>
+<p>托管设置的优先级最高，用户和项目都无法覆盖它设置的值，且托管偏好压过系统目录。仅靠设置本身拦不住用户添加提供商、MCP 服务器、智能体或插件；要强制限制，请在托管配置里使用 <a href="policies.html">策略</a>。</p>
+<p>想对每个项目都生效的用户级设置放全局配置：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>~/.config/opencode/opencode.json(c)</code></pre>
+<p>项目级设置放以下任一位置：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)</code></pre>
+<p>OpenCode 从当前目录向上搜索到文件系统根。它先把<strong>最远目录到最近目录</strong>的直接 <code>opencode.json(c)</code> 依次合并，然后按同样顺序合并 <code>.opencode</code> 目录里的文件。也就是说，每个被发现的 <code>.opencode</code> 配置都会覆盖所有直接配置。除非你确实需要这种行为，否则一棵目录树里最好统一用一种形式。</p>
+<p>例如，从 <code>/home/user/projects/acme/packages/web</code> 启动 OpenCode：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/</code></pre>
+<p>OpenCode 按从低到高的优先级应用这些文件：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>1. ~/.config/opencode/opencode.json
+2. /home/user/projects/acme/opencode.json
+3. /home/user/projects/acme/packages/web/opencode.json
+4. /etc/opencode/opencode.json</code></pre>
+<p>包级配置覆盖仓库配置里匹配的设置，仓库配置覆盖全局配置，系统配置覆盖以上全部。不冲突的设置都会保留。全局和项目文件里的<a href="policies.html">策略</a>按相反顺序求值，而系统级策略压过所有策略。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>.opencode/</code> 目录里的配置永远压过同目录树上的直接 <code>opencode.json(c)</code>。团队里常见的坑：A 在根目录用直接文件、B 把同一份配置放进 <code>.opencode/</code>，结果 B 的「顺手一改」悄悄盖掉了根目录设置。约定统一格式能省掉这类「为什么我的配置不生效」的排查时间。</p>
+</aside>
+
+<h2>Schema</h2>
+<p>OpenCode 的完整配置 schema 在 <a href="https://opencode.ai/config.json" target="_blank" rel="noopener">opencode.ai/config.json</a>。</p>
+<p>在配置文件里加上 <code>$schema</code> 字段，就能在支持 JSON Schema 的编辑器里获得校验和自动补全：</p>
+<div class="term-head"><span>opencode.json</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json"
+}</code></pre>
+<p>把 schema 当作可用字段、可接受值和嵌套结构的权威来源。</p>
+
+<h3>Shell</h3>
+<p>设置终端和 shell 工具使用的 shell：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "shell": "/bin/zsh",
+}</code></pre>
+
+<h3>模型</h3>
+<p>用 <code>provider/model</code> 格式设置默认模型。根级默认目前不保留 <code>#variant</code>；智能体和命令里的模型引用可以选变体。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "model": "anthropic/claude-sonnet-5-5",
+}</code></pre>
+<p>模型选择和本地模型见 <a href="models.html">模型</a>一章。</p>
+
+<h3>默认智能体</h3>
+<p>选择会话未显式指定时使用的主智能体：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "default_agent": "build",
+}</code></pre>
+<p>内置与自定义智能体见 <a href="agents.html">Agents</a>一章。</p>
+
+<h3>更新</h3>
+<p>从全局配置控制更新检查。把 <code>update</code> 设为 <code>"disable"</code> 跳过检查、<code>"notify"</code> 在安装前提示可用更新、<code>"auto"</code> 自动安装。省略时默认 <code>"notify"</code>。</p>
+<p>自动安装不会重启正在运行的服务器；重启它才能启用已安装的更新。项目级设置会被忽略。</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "update": "notify",
+}</code></pre>
+
+<h3>用户名</h3>
+<p>设置一个用户名。OpenCode 接受该字段，但不会在对话里显示它：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "username": "alice",
+}</code></pre>
+
+<h3>权限</h3>
+<p>定义有序规则，在智能体对匹配资源使用工具之前执行 allow、deny 或 ask：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}</code></pre>
+<p>规则匹配与可用动作见 <a href="permissions.html">权限</a>一章。</p>
+
+<h3>策略</h3>
+<p>允许或禁用一个提供商、对权限检查做硬拒绝，或封禁 MCP 服务器、技能、插件——用有序语句表达，更宽范围的配置可以覆盖它们：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}</code></pre>
+<p>匹配、跨配置文件的优先级和 Console 托管策略见 <a href="policies.html">策略</a>一章。</p>
+
+<h3>智能体</h3>
+<p>覆盖内置智能体，或定义有专属模型、指令、模式和权限的专用智能体：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}</code></pre>
+<p>全部智能体选项和基于文件的智能体见 <a href="agents.html">Agents</a>一章。</p>
+
+<h3>快照</h3>
+<p>启用或禁用撤销（undo）和回退（revert)行为使用的文件系统快照：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "snapshots": false,
+}</code></pre>
+<p>撤销与重做行为见 <a href="snapshots.html">快照</a>一章。</p>
+
+<h3>文件监视</h3>
+<p>忽略不应触发文件系统更新的文件和目录：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}</code></pre>
+
+<h3>格式化器</h3>
+<p>在 <code>write</code>、<code>edit</code> 或 <code>patch</code> 工具改动文件后进行格式化。把 <code>formatter</code> 设为 <code>true</code> 启用可用的内置格式化器：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "formatter": true,
+}</code></pre>
+<p>内置与自定义格式化器见 <a href="formatters.html">格式化器</a>一章。</p>
+
+<h3>媒体</h3>
+<p>控制 <code>read</code> 工具加载的超大图片在发送给模型之前如何缩放或拒绝：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}</code></pre>
+<p>图片处理与限制见 <a href="attachments.html">附件</a>一章。</p>
+
+<h3>工具输出</h3>
+<p>设置工具结果保留的最大行数和字节数：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}</code></pre>
+
+<h3>网页搜索</h3>
+<p>选择 OpenCode 的网页搜索方式。用 <code>"random"</code> 自动选择一个可用提供商：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "websearch": {
+    "provider": "random",
+  },
+}</code></pre>
+<p>提供商、凭证、选择、速率限制和禁用搜索见 <a href="websearch.html">网页搜索</a>一章。</p>
+
+<h3>MCP</h3>
+<p>配置本地和远程的 MCP 服务器。全局的 <code>mcp.timeout</code> 作用于配置文件里定义的服务器；每个服务器自己的 <code>timeout</code> 覆盖它：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}</code></pre>
+<p>远程服务器、OAuth、环境变量和超时见 <a href="mcp-servers.html">MCP 服务器</a>一章。</p>
+
+<h3>上下文压缩</h3>
+<p>控制自动上下文压缩，以及它保留多少近期上下文：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": "15%",
+  },
+}</code></pre>
+<p><code>buffer</code> 是自动压缩启动前，模型上下文窗口中保持空闲的比例。</p>
+<p>本地摘要仍是默认。想对自动和手动压缩都启用原生的提供商压缩，用提供商或模型策略选择：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}</code></pre>
+<p>模型设置覆盖提供商设置。自动压缩使用所选模型的可用输入预算。提供商检查点把近期用户消息保持在同一个 <code>compaction.keep.tokens</code> 预算内（本地摘要用它保留尾部）。顶层 <code>compaction.auto: false</code> 会停止新的自动压缩，但不会丢弃已安装的检查点。预算与溢出恢复见 <a href="compaction.html">上下文压缩</a>一章。</p>
+
+<h3>会话预热</h3>
+<p>用周期性的临时请求让最近活跃的模型会话保持「温热」。预热默认关闭；设为 <code>true</code> 即在每个模型的缓存即将过期前预热，最长 30 分钟：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "auto",
+    "duration": "30 minutes",
+  },
+}</code></pre>
+<p>提供商或模型的 <code>settings.cache.warming</code> 会覆盖它，<code>settings.cache.ttl</code> 设置提供商保存缓存的时长。请求行为、自定义和成本考量见 <a href="warming.html">会话预热</a>一章；<code>cache.ttl</code> 见 <a href="models.html">模型</a>的缓存寿命一节。</p>
+
+<h3>技能</h3>
+<p>添加 OpenCode 应搜索智能体技能（Skill）的目录或 URL：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}</code></pre>
+<p>技能结构和 <code>.opencode/skills/</code> 下的自动发现见 <a href="skills.html">Skills</a>一章。</p>
+
+<h3>命令</h3>
+<p>把可复用的斜杠命令定义为具名提示词模板：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}</code></pre>
+<p>参数、模型、智能体和基于文件的命令见 <a href="commands.html">自定义命令</a>一章。</p>
+
+<h3>指令文件</h3>
+<p>声明额外的指令文件、glob 或 HTTP(S) URL。OpenCode 会把它们与发现的 <code>AGENTS.md</code> 一起加载：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}</code></pre>
+<p>项目指令与 <code>AGENTS.md</code> 见 <a href="instructions.html">指令文件</a>一章。</p>
+
+<h3>References</h3>
+<p>让本地目录或 Git 仓库以具名方式作为辅助上下文可用：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}</code></pre>
+<p>简写、可见性与路径解析见 <a href="references.html">References</a>一章。</p>
+
+<h3>Worktree</h3>
+<p>设置新本地 worktree 的父目录。OpenCode 会在其后追加请求的或生成的 worktree 名称：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}</code></pre>
+<p>相对路径以项目保存的规范检出（canonical checkout）为基准解析。全局和项目配置都适用；绝对路径按原样使用，<code>~/</code> 从用户家目录解析。</p>
+<p>例如，这份全局配置会把新 worktree 放到各项目自己的 <code>.lane/trees/</code> 目录下：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}</code></pre>
+<p>不设置时，创建使用服务器数据目录下的 <code>worktree/&lt;项目 ID 前 6 位&gt;</code>。Worktree 的创建和刷新从项目保存的规范检出加载配置——即使其它克隆与它共享项目 ID 也一样。修改这个设置不会移动已有的 worktree。</p>
+<p>Git 是内置默认。注册了策略的<a href="build-plugins-server.html">服务器插件</a>会在其插件运行时里自动成为默认。项目操作使用规范检出的运行时。策略专属选项属于那个插件，而不是 <code>worktree</code> 配置对象。</p>
+
+<h3>插件</h3>
+<p>从包或本地插件目录加载插件。插件接受选项时用对象形式：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}</code></pre>
+<p>插件加载与配置见 <a href="plugins.html">插件</a>一章。</p>
+
+<h3>Providers</h3>
+<p>配置提供商，添加或覆盖它们的模型、请求设置、请求头和模型变体：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol-custom": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}</code></pre>
+<p>提供商的 <code>settings.transport: "websocket"</code> 选择其会话 WebSocket。</p>
+<p>凭证、自定义端点、提供商包、WebSocket 传输和模型配置见 <a href="providers.html">Providers</a>一章。</p>
+
+<h2>变量</h2>
+<p>配置文件里可以用变量替换引用环境变量和文件内容。引用写在 JSON 字符串里。</p>
+
+<h3>环境变量</h3>
+<p>用 <code>{env:VARIABLE_NAME}</code> 替换环境变量：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
+  },
+}</code></pre>
+<p>环境变量未设置时会替换为空字符串。</p>
+
+<h3>文件内容</h3>
+<p>用 <code>{file:path/to/file}</code> 替换文件内容：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": {
+        "apiKey": "{file:~/.secrets/openai-key}",
+      },
+    },
+  },
+}</code></pre>
+<p>文件路径可以是：</p>
+<ul>
+<li>相对配置文件目录</li>
+<li>绝对路径，或以 <code>~/</code> 开头指向家目录</li>
+</ul>
+<p>文件不存在时替换为空字符串。</p>
+<p>典型用途：</p>
+<ul>
+<li>把 API key 这类敏感数据放在单独的文件里。</li>
+<li>在多个配置文件之间共享公共配置片段。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>别把 API key 明文写进 <code>opencode.json</code> 然后提交到仓库——配置文件通常会进版本库。用 <code>{env:KEY}</code> 引用环境变量，或 <code>{file:...}</code> 指向 <code>~/.secrets/</code> 下不被版本控制跟踪的文件。变量未设置或文件缺失时<strong>只会替换成空字符串</strong>，不会报错，所以要留意「配置看起来正常但实际没生效」的情况。</p>
+</aside>
+
+<h2>实验性设置</h2>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>实验性设置可能在任何版本中更改、损坏或被移除，且不会另行通知。不要在稳定工作流里依赖它们。</p>
+</aside>
+
+<p>所有实验性设置都在 <code>experimental</code> 键下：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2,
+    "image_generate": { "model": "openai/gpt-image-2" },
+    "location_idle_timeout": "4 hours",
+  },
+}</code></pre>
+
+<h3>待办清单</h3>
+<p>把 <code>todo</code> 设为 <code>true</code>，给智能体一个 <code>todowrite</code> 工具来跟踪多步骤工作。默认 <code>false</code>。</p>
+
+<h3>子智能体深度</h3>
+<p><code>subagent_depth</code> 设置子智能体能再启动多少层子智能体。默认 <code>1</code>，即子智能体不能再启动子智能体。</p>
+
+<h3>图片生成</h3>
+<p><code>image_generate</code> 设置 <a href="tools.html">内置工具</a>里 <code>experimental_image_generate</code> 工具的默认模型，格式为 <code>providerID/modelID</code>，可选 <code>#variant</code>。当该模型不可用或处理不了请求时，OpenCode 会自动挑选另一个图片模型：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "experimental": {
+    "image_generate": {
+      "model": "openai/gpt-image-2",
+    },
+  },
+}</code></pre>
+
+<h3>位置空闲超时</h3>
+<p><code>location_idle_timeout</code> 控制一个项目位置在多久没有会话活动后，OpenCode 会卸载其服务。接受如 <code>"2 hours"</code> 的时长，默认 <code>"60 minutes"</code>。运行中的会话和后台任务会让位置保持加载。设为 <code>false</code> 则永不卸载空闲位置。项目配置可以覆盖全局值：</p>
+<div class="term-head"><span>opencode.jsonc</span><span></span></div>
+<pre><code>{
+  "experimental": {
+    "location_idle_timeout": false,
+  },
+}</code></pre>
+
+<h3>已弃用的策略键</h3>
+<p><code>experimental.policies</code> 已弃用。请改用顶层的 <a href="policies.html"><code>policies</code></a>。旧键仍然有效，并合并进 <code>policies</code>。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

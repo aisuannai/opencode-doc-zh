@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness · Hermes · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="h-hermes" data-group="Console" data-src="https://opencode.ai/docs/console/harnesses/hermes/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Harness · Hermes</h1>
+<p class="lede"><a href="https://hermes-agent.nousresearch.com" target="_blank" rel="noopener">Hermes Agent</a> 内置了 OpenCode 的按量付费和 Go 两个提供商。它会为每个付费或 Go 模型自动挑选合适的 API。免费档 chat 模型要求使用 OpenCode，从 Hermes 调用会返回 HTTP <code>403</code>。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p><a href="console-harnesses.html#console-cli">Console CLI</a> 可以一条命令完成 Hermes 的接入，并附带工作区的策略（policies）、MCP 服务器、Skills 和指令文件：<code>npx @opencode/console setup hermes</code>。本文其余部分讲的是<strong>手动配置</strong>的步骤。</p>
+</aside>
+
+<table>
+<thead>
+<tr><th>提供商</th><th>套餐</th><th>Key 环境变量</th></tr>
+</thead>
+<tbody>
+<tr><td><code>opencode-zen</code></td><td>按量付费（Pay-as-you-go）</td><td><code>OPENCODE_ZEN_API_KEY</code></td></tr>
+<tr><td><code>opencode-go</code></td><td>Go</td><td><code>OPENCODE_GO_API_KEY</code></td></tr>
+</tbody>
+</table>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>和 Claude Code / Codex 不同，Hermes 属于「内置支持」阵营：它把 OpenCode Console 当成两个官方提供商直接集成进配置流程，不用你手写 base URL、也不用手动声明协议——「它为每个模型挑对 API」意味着协议翻译这一步也由 Hermes 侧完成。你只需要提供 key 和选模型。</p>
+</aside>
+
+<h2>配置（Configure）</h2>
+<p>运行模型设置命令，按量付费选 <strong>OpenCode Zen</strong>，Go 套餐选 <strong>OpenCode Go</strong>：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>hermes model</code></pre>
+
+<p>粘贴一个<a href="console-harnesses.html#get-an-api-key">个人 API key</a>，然后选择模型。Hermes 会把 key 保存到 <code>~/.hermes/.env</code>，把选择保存到 <code>~/.hermes/config.yaml</code>：</p>
+
+<div class="term-head"><span>~/.hermes/config.yaml</span><span>选择结果示例</span></div>
+<pre><code>model:
+  provider: opencode-go
+  default: kimi-k3</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>Go 套餐<strong>要求每个请求都带会话 ID（session ID）</strong>。Hermes 从 v0.21.6 起会自动发送它。如果你用的版本更旧，请求可能被拒绝——先升级 Hermes，再接 Go。</p>
+</aside>
+
+<h2>模型（Models）</h2>
+<p>使用 <a href="console-models.html#endpoints">Console</a> 或 <a href="console-go.html#endpoints">Go</a> 端点表里的模型 ID，<strong>不带前缀</strong>。会话中用 <code>/model</code> 切换，或为单次运行指定：</p>
+
+<div class="term-head"><span>bash</span><span>单次运行指定提供商和模型</span></div>
+<pre><code>hermes chat --provider opencode-zen --model claude-sonnet-5-5</code></pre>
+
+<h2>Console MCP</h2>
+<p>用 OAuth 方式添加 <a href="console-harnesses.html#console-mcp">Console MCP</a> 服务器，然后在浏览器中完成登录：</p>
+
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>hermes mcp add opencode-console --url https://opencode.ai/console/mcp --auth oauth
+hermes mcp login opencode-console</code></pre>
+
+<p>也可以直接写进 <code>~/.hermes/config.yaml</code>，然后在会话里运行 <code>/reload-mcp</code> 生效：</p>
+
+<div class="term-head"><span>~/.hermes/config.yaml</span><span>MCP 配置</span></div>
+<pre><code>mcp_servers:
+  opencode-console:
+    url: https://opencode.ai/console/mcp
+    auth: oauth</code></pre>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

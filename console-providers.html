@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>提供商 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console-providers" data-group="Console" data-src="https://opencode.ai/docs/console/providers/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>提供商</h1>
+<p class="lede">把你已经在付费的提供商账号（如 Anthropic、OpenAI 或 AWS Bedrock）接进 Console，与工作区里的所有人共享它们的模型。Console 保管密钥，通过自己的网关对外提供各提供商的服务——成员用模型时完全看不到提供商密钥。你自己的工具也能通过<a href="console-api-providers.html">提供商 API（Providers API）</a>使用同一个网关。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>这就像公司的「钥匙托管 + 总机」：老板把各家的 API key 托管给 Console（钥匙不上交给员工），员工想用某个模型就拨总机（Console 网关），总机拿托管钥匙转接。好处有三：key 不外泄、换 key 不用通知所有人、用量全部走同一本账。所有者和管理员在 <strong>Providers</strong> 标签页管理提供商；成员运行 <code>/connect</code> 后就能在 OpenCode 里用到已启用的模型。</p>
+</aside>
+
+<h2>连接提供商</h2>
+<ol>
+<li>打开 <strong>Providers</strong> 页，点击 <strong>Connect Provider</strong>。</li>
+<li>从目录里挑一个提供商，填入它的 API key。</li>
+<li>可选：点击 <strong>Test connection</strong> 测试连通性，然后点 <strong>Save</strong> 保存。</li>
+</ol>
+<p>目录里包括 Anthropic、OpenAI、Google、xAI、DeepSeek、Mistral、Groq、OpenRouter 等等。目录里的提供商自带预配置好的模型列表。</p>
+
+<h3>云提供商</h3>
+<p>云提供商需要多填几项信息。</p>
+<table>
+<thead><tr><th>提供商</th><th>所需信息</th></tr></thead>
+<tbody>
+<tr><td>Azure</td><td>资源名称（Resource name）和 API key</td></tr>
+<tr><td>AWS Bedrock</td><td>区域（Region）和 API key</td></tr>
+<tr><td>Google Vertex AI</td><td>区域和服务账号 JSON（service account JSON）</td></tr>
+<tr><td>Cloudflare AI Gateway</td><td>账户 ID、Gateway ID 和 API token</td></tr>
+<tr><td>Databricks</td><td>工作区 URL 和 token</td></tr>
+</tbody>
+</table>
+
+<h3>自定义提供商</h3>
+<p>点击 <strong>Add Custom Provider</strong> 可以接入任何其他端点，再用 <strong>Add Model</strong> 添加它的模型。</p>
+<table>
+<thead><tr><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>Base URL（基础 URL）</td><td>Console 转发请求的目标地址，例如 <code>https://api.deepseek.com/v1</code>。</td></tr>
+<tr><td>Format（格式）</td><td>Chat Completions、Responses API、Anthropic Compatible 或 Google Generative AI。</td></tr>
+<tr><td>Auth mode（认证模式）</td><td>Bearer、API key 请求头，或自定义请求头。</td></tr>
+<tr><td>Credential（凭据）</td><td>Console 发给提供商的密钥。</td></tr>
+</tbody>
+</table>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「Format」决定 Console 用哪种协议方言和目标端点对话：OpenAI 系的 Chat Completions、新一代 Responses API、Anthropic 的 messages 协议、Google 的 Generative AI 协议。选对了格式，中转站、私有部署模型（如 vLLM、Ollama）都能当成标准提供商接入——这也是自带网关方案相对「纯转发」的核心价值。</p>
+</aside>
+
+<h2>选择模型</h2>
+<p>点开一个提供商即可查看它的模型。只有启用的模型才对成员可用。</p>
+<ul>
+<li>用 <strong>Enabled</strong> 开关打开或关闭某个模型。</li>
+<li>打开 <strong>New models</strong>，以后提供商新加的模型会自动启用。</li>
+</ul>
+
+<h2>编辑模型</h2>
+<p>点击一个模型即可编辑。关闭面板时自动保存修改。</p>
+<table>
+<thead><tr><th>区域</th><th>可以修改的内容</th></tr></thead>
+<tbody>
+<tr><td>General（常规）</td><td>显示名称、API ID、工具支持、输入和输出类型</td></tr>
+<tr><td>Variants（变体）</td><td>带独立请求头或请求体的变体</td></tr>
+<tr><td>Configuration（配置）</td><td>默认变体、请求头和请求体、token 上限</td></tr>
+<tr><td>Cost Tiers（成本档位）</td><td>每 1M tokens 的输入、输出、缓存读取、缓存写入价格</td></tr>
+</tbody>
+</table>
+
+<h3>自定义定价</h3>
+<p>目录模型初始使用提供商的官方标价。如果你谈到了优惠价（比如 OpenAI 合同折扣），可以在 <strong>Cost Tiers</strong> 里覆盖价格，让用量报表和<a href="console-budgets.html">预算</a>与你的实际支出一致。</p>
+<table>
+<thead><tr><th>字段</th><th>官方标价</th><th>你的价格</th></tr></thead>
+<tbody>
+<tr><td>输入价格</td><td>$2.50</td><td>$2.00</td></tr>
+<tr><td>输出价格</td><td>$15.00</td><td>$12.00</td></tr>
+<tr><td>缓存读取价格</td><td>$0.25</td><td>$0.20</td></tr>
+</tbody>
+</table>
+<p>你改过的价格会在提供商页面上高亮显示。在字段上用 <strong>Restore default value</strong>，或在模型上用 <strong>⋯ › Restore...</strong>，即可恢复官方标价。</p>
+<p>当模型在超过某个上下文长度后加价时（例如提示词超过 200K tokens），可以添加一个 <strong>Context</strong> 档位。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>自定义定价<strong>只影响账目记录</strong>，不会改变你实际被提供商收取的金额。它的价值在于让 Console 里的用量报表、预算提醒、成本分摊与真实账单对得上；如果团队按模型用量向内部分摊成本，这一步尤其重要，否则报表数字和财务数字会对不上。</p>
+</aside>
+
+<h3>自定义模型</h3>
+<p>点击 <strong>Add Model</strong>，填上 <strong>Display name</strong>（显示名称）和 <strong>Model ID</strong>，即可添加目录里没有的模型。在已有模型上使用 <strong>⋯ › Duplicate...</strong> 可以基于它的设置快速复制一份。</p>
+
+<h2>OpenCode 模型</h2>
+<p><strong>Models</strong> 标签页管理 Console 自带的<a href="console-models.html">模型</a>，费用从工作区额度中扣除。它的操作方式和提供商页面一样：</p>
+<ul>
+<li>单独开启或关闭某个模型。</li>
+<li>关闭 <strong>Free models</strong>，可以为整个工作区屏蔽免费模型。</li>
+<li>开启 <strong>New models</strong>，新的 Console 模型会自动启用。</li>
+</ul>
+<p>想只用你自己的提供商，可以在 <strong>⋯ › Disable</strong> 里禁用整个 Console 提供商。</p>
+
+<h2>在 OpenCode 中使用</h2>
+<p>成员运行 <code>/connect</code> 并选择工作区。每个启用的提供商都会以「工作区名 / 提供商名」的形式出现，<code>/models</code> 会列出其中启用的模型。</p>
+<div class="term-head"><span>示例</span><span>/models 中的显示名</span></div>
+<pre><code>Acme Inc. / Anthropic</code></pre>
+<p>在 <strong>Settings › General</strong> 中打开 <strong>Managed providers only</strong>，可以把所有人的 OpenCode 限制为只使用工作区的提供商。</p>
+
+<h2>发送身份（Send identity）</h2>
+<p>当提供商是你自己运营的网关时，在它的页面上打开 <strong>Send identity</strong>。此后 Console 发往该网关的每个模型请求都会带上一个 <code>x-opencode-actor</code> 请求头，标明请求背后的成员或服务账号，你的网关就能按发送者记录日志或做限制。</p>
+<div class="term-head"><span>HTTP 请求头</span><span></span></div>
+<pre><code>x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...</code></pre>
+<ul>
+<li>默认关闭；修改 base URL 也会把它关掉。</li>
+<li>提供商仍处于厂商自家 API（如 <code>https://api.openai.com/v1</code>）时，不显示这个设置——因为厂商会忽略这个头。</li>
+<li>Console 会移除客户端发来的任何 <code>x-opencode-*</code> 请求头，所以你的网关收到的 <code>x-opencode-actor</code> 只可能是 Console 签名的那一个。</li>
+<li><strong>Test connection</strong> 和模型列表功能仅凭凭据调用 <code>GET &lt;base URL&gt;/models</code>，所以不要在该路由上强制要求这个请求头。</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>为什么这个头可信？因为它是 Console 用 ES256 私钥签名的 JWT，且 Console 会剥掉客户端伪造的同名头。对网关来说，这意味着「谁在用我的 key」从猜变成了可验证的事实——审计日志、按团队限流、异常检测都能落到真实身份上。</p>
+</aside>
+
+<h3>Token 结构</h3>
+<p>这个请求头是 Console 为每个请求签发的 JWT。</p>
+<table>
+<thead><tr><th>字段</th><th>取值</th></tr></thead>
+<tbody>
+<tr><td><code>alg</code></td><td><code>ES256</code></td></tr>
+<tr><td><code>typ</code></td><td><code>opencode-actor+jwt</code></td></tr>
+<tr><td><code>iss</code></td><td><code>https://opencode.ai/inference</code></td></tr>
+<tr><td><code>aud</code></td><td>提供商的 base URL（去掉末尾斜杠）</td></tr>
+<tr><td><code>iat</code>、<code>exp</code></td><td><code>exp</code> 在 <code>iat</code> 之后 120 秒</td></tr>
+</tbody>
+</table>
+<table>
+<thead><tr><th>Claim（声明）</th><th>取值</th></tr></thead>
+<tbody>
+<tr><td><code>sub</code></td><td>成员为 <code>user_id</code>，否则为 <code>service_account_id</code></td></tr>
+<tr><td><code>workspace_id</code></td><td>请求所在的工作区</td></tr>
+<tr><td><code>user_id</code>、<code>email</code></td><td>成员的信息（当请求由成员发出时）</td></tr>
+<tr><td><code>service_account_id</code></td><td>服务账号的信息（当请求由服务账号发出时，包括智能体）</td></tr>
+<tr><td><code>session_id</code></td><td>客户端的会话 ID（当客户端发送了会话 ID 时）</td></tr>
+<tr><td><code>request_id</code></td><td>客户端在 <code>x-opencode-log-id</code> 响应头中拿回的 ID</td></tr>
+</tbody>
+</table>
+<p>成员发出的请求携带的 payload 类似这样：</p>
+<div class="term-head"><span>json</span><span>JWT payload 示例</span></div>
+<pre><code>{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}</code></pre>
+
+<h3>验证 Token</h3>
+<p>Console 在 <code>https://opencode.ai/inference/.well-known/jwks.json</code> 公布其公钥，响应带 <code>Cache-Control: public, max-age=300</code>。校验顺序：签名、签发者、受众、类型和有效期，然后是工作区。下面的例子使用 <a href="https://github.com/panva/jose" target="_blank" rel="noopener">jose</a>：</p>
+<div class="term-head"><span>ts</span><span></span></div>
+<pre><code>import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}</code></pre>
+<p>把 <code>audience</code> 设为 Console 中保存的提供商 base URL（去掉末尾斜杠），并把 <code>org_...</code> 替换成你 Console URL 中的工作区 ID。Console 在启用新的签名密钥之前会先公布它，因此按 <code>kid</code> 查找密钥的验证器（如 <code>createRemoteJWKSet</code>）在密钥轮换期间也能持续工作。</p>
+
+<h2>禁用或移除</h2>
+<p>打开提供商的 <strong>⋯</strong> 菜单：</p>
+<ul>
+<li><strong>Disable</strong>：对成员隐藏该提供商及其模型，但保留设置。</li>
+<li><strong>Remove...</strong>：删除该提供商及其模型。弹窗会显示最近有哪些人用过它，并提供 <strong>Disable instead</strong>（改为禁用）选项。</li>
+</ul>
+<p>要轮换密钥，点击提供商页面上的凭据并输入新的即可。</p>
+
+<h2>计费</h2>
+<p>提供商直接向你收取 token 费用，Console 不为这些 token 收取额度。Console 仍会按模型定价记录每个请求及其成本，因此用量报表和<a href="console-budgets.html">预算</a>都会包含这些请求。</p>
+<p>想在自己的工具（而非 OpenCode）中调用提供商，请使用<a href="console-api-providers.html">提供商 API</a>。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

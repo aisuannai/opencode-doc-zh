@@ -1,0 +1,3345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GUI 插件 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-plugins-gui" data-group="构建与集成" data-src="https://opencode.ai/docs/build/plugins/gui/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>GUI 插件</h1>
+<p class="lede">GUI 插件用 GUI 插件 SDK <code>@opencode/plugin/gui</code> 给 OpenCode Desktop 添加面板、命令、设置页和原生集成。它是<a href="build-plugins.html">插件包</a>的 <code>./gui-experimental</code> 部分，可以单独存在，也可以与<a href="build-plugins-server.html">服务器部分</a>和 <a href="build-plugins-cli.html">TUI 部分</a>并列。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>GUI 插件 API 是<strong>实验性</strong>的，版本之间可能变化。导出名里的 <code>-experimental</code> 就是在包里明示了这一点。</p>
+</aside>
+
+<p><code>./gui-experimental</code> 文件与服务器、TUI 部分一样，默认导出 <code>Plugin.define</code>：</p>
+
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+export default Plugin.define({
+  i18n: { en: { "command.open": "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () =&gt; ({
+      id: "open",
+      title: ctx.t("command.open"),
+      run: () =&gt; void ctx.client.rpc(Acme).open({}),
+    }))
+  },
+  main(ctx) {
+    ctx.log.write("info", "acme started")
+  },
+})</code></pre>
+
+<p>GUI 插件可以跑在两个进程里：</p>
+<ul>
+<li><strong><code>setup</code></strong>——在每个桌面应用窗口里运行。它贡献面板、命令、设置页、插槽（slot）、服务器数据源、链接处理器和样式。见<a href="#sec-19">窗口</a>一节。</li>
+<li><strong><code>main</code></strong>——只运行一次，位于 Electron 主进程。它提供类型化的 <code>Ipc</code> 契约、原生菜单项、<code>WebContentsView</code> 嵌入，以及 Node 和 Electron 集成。见<a href="#sec-69">主进程</a>一节。</li>
+</ul>
+
+<h2>包（Package）</h2>
+<p>一个插件包可以从同一个 npm 包里同时发布服务器、TUI 和 GUI 代码。在 <code>./tui</code> 旁边加一个 <code>./gui-experimental</code> 导出，OpenCode Desktop 就会在自己的后台服务器上为每个插件加载它：</p>
+
+<div class="term-head"><span>package.json</span><span>JSON</span></div>
+<pre><code>{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}</code></pre>
+
+<p>用户像安装其它插件一样安装它，没有单独的 GUI 安装步骤：</p>
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "plugins": ["opencode-acme-plugin"],
+}</code></pre>
+
+<p>GUI 不声明 id：它沿用插件的 id，即服务器部分的 <code>id</code>；没有服务器部分的包则用包名（本地目录没有 <code>name</code> 字段时用目录名）。通过 <code>ctx.id</code> 读取。</p>
+
+<h3>一个文件，两个进程</h3>
+<p>每个进程都会对整个 <code>./gui-experimental</code> 文件求值并读取其默认导出。窗口运行 <code>setup</code>，桌面应用的主进程运行 <code>main</code>：</p>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { shell } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  setup(ctx) {
+    // 窗口代码：Solid 组件、ctx.layout、ctx.add(Command, …)。
+  },
+  main(ctx) {
+    // 主进程代码：electron、Node 内置模块、ctx.windows。
+    ctx.windows.on("open", () =&gt; shell.beep())
+  },
+})</code></pre>
+
+<p>因为两个进程求值的是同一个文件，所以每个进程里，对方进程的模块都是<strong>惰性占位符</strong>（inert placeholder）：</p>
+<ul>
+<li><strong>在窗口里</strong>，<code>electron</code> 和 Node 内置模块是惰性占位符。</li>
+<li><strong>在主进程里</strong>，Solid 和仅窗口可用的模块是惰性占位符。</li>
+</ul>
+
+<p>占位符接受模块作用域内的任何属性读取、调用或构造——比如 Solid 提升的模板或打包器提升的 <code>require</code> 调用。把每个进程的代码都放在它自己的 setup 里：跑错进程的代码只会拿到占位符，而不是能用的值。</p>
+
+<p><code>Plugin.define</code> 和契约辅助工具在两个进程里都来自同一个 SDK。在主进程里，<code>@opencode/plugin/gui</code> 解析到主 SDK，它导出同样的 <code>Plugin</code>、<code>Store</code>、<code>Ipc</code>、<code>Contract</code> 和 <code>Registry</code>。一份定义同时服务两个进程。它那些仅窗口可用的导出（如 <code>Command</code>、<code>bindPlugin</code>、<code>createKeyed</code>）在主进程里是 <code>undefined</code>，所以只在 <code>setup</code> 里使用它们。</p>
+
+<h3>构建 bundle</h3>
+<p><code>./gui-experimental</code> 必须是一个预构建的 CommonJS 文件。用 <code>@opencode/plugin/gui/vite</code> 提供的 Vite 预设来构建：</p>
+<div class="term-head"><span>vite.config.ts</span><span>TypeScript</span></div>
+<pre><code>import { defineConfig } from "vite"
+import { gui } from "@opencode/plugin/gui/vite"
+
+export default defineConfig({ plugins: [gui()] })</code></pre>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>vite build</code></pre>
+
+<p>这个预设会做以下事情：</p>
+<ul>
+<li>用 <code>vite-plugin-solid</code> 编译 Solid JSX。</li>
+<li>产出一个 CommonJS 文件，并内联所有动态 <code>import()</code>——因为应用无法加载第二个 chunk。</li>
+<li>把应用的<a href="#sec-5">共享模块</a>、Electron 和 Node 内置模块保持为外部依赖（external），其余依赖全部打包进来。</li>
+<li>对任何其它 <code>effect/*</code>、<code>solid-js/*</code> 或 <code>@opencode/*</code> 模块直接让构建失败。应用不提供这些模块，打包一份副本也无法共享应用的实例。</li>
+</ul>
+
+<div class="term-head"><span>报错示例</span><span></span></div>
+<pre><code>effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …</code></pre>
+
+<p>改为从共享入口导入，例如 <code>import { Schema } from "effect"</code>。</p>
+
+<h4>预设选项</h4>
+<p>给 <code>gui()</code> 传选项可以修改入口或输出文件：</p>
+<div class="term-head"><span>vite.config.ts</span><span>TypeScript</span></div>
+<pre><code>export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })</code></pre>
+
+<ul>
+<li><code>entry</code> 是默认导出 <code>Plugin.define</code> 的文件，默认 <code>src/gui.tsx</code>。</li>
+<li><code>outFile</code> 是 <code>./gui-experimental</code> 导出指向的 bundle，默认 <code>dist/gui-experimental.cjs</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}</code></pre>
+
+<h3>依赖（Dependencies）</h3>
+<p>把构建工具加为 devDependencies。应用在运行时提供 <code>@opencode/plugin/gui</code>，所以 bundle 只需要 <code>@opencode/plugin</code> 依赖里的类型：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>bun add -d vite vite-plugin-solid solid-js</code></pre>
+
+<p>要在 <code>main</code> 里用 Electron 和 Node 的类型，还要加 <code>electron</code> 和 <code>@types/node</code>：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>bun add -d electron @types/node</code></pre>
+
+<h3>共享模块（Shared modules）</h3>
+<p>每个进程都会向 bundle 提供以下模块。require 一个两个进程都不提供的模块，会让插件的 GUI 失败：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Schema } from "effect" // 两个进程都可用
+import { createSignal } from "solid-js" // 窗口；主进程里是惰性占位符
+import { readFile } from "node:fs/promises" // 主进程；窗口里是惰性占位符</code></pre>
+
+<ul>
+<li><strong>两个进程都可用：</strong><code>effect</code>、<code>@opencode/plugin/gui</code>、<code>@opencode/plugin/gui/main</code>、<code>@opencode/plugin/rpc</code>、<code>@opencode/schema/rpc</code>、<code>@opencode/client</code>、<code>@opencode/client/effect</code>。</li>
+<li><strong>仅窗口可用：</strong><code>solid-js</code>、<code>solid-js/web</code>、<code>solid-js/store</code>、<code>@opencode/client/solid</code>、<code>@opencode/plugin/gui/{file,review,browser}</code>。主进程里是惰性占位符。</li>
+<li><strong>仅主进程可用：</strong><code>electron</code> 和 Node 内置模块（如 <code>node:fs</code>）。窗口里是惰性占位符。</li>
+</ul>
+
+<h2>GUI 入口在哪里加载</h2>
+<p>OpenCode Desktop 从它自己的后台服务器加载 GUI 入口，而那个服务器已经加载了你配置里的插件，所以 GUI 入口永远不会引入新的代码来源。把插件配置在<strong>全局</strong> <code>opencode.json(c)</code> 里，它的 GUI 就能在每个窗口里可用。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>TUI 从 <code>cli.json</code> 读插件，但桌面应用只读 <code>opencode.json(c)</code>。一个只发布过 TUI 部分、被用户列在 <code>cli.json</code> 里的包，一旦增加了 <code>./gui-experimental</code>，就必须同时列进 <code>opencode.json(c)</code>。</p>
+</aside>
+
+<p>桌面应用的主进程用一份只有它自己持有的凭据，从自己的服务器列出插件并读取其 bundle，然后把同一份集合发给各窗口。窗口不能提供主进程代码。</p>
+
+<p>服务器部分加载失败的插件没有 GUI。</p>
+
+<h2>重载与更新</h2>
+<p>从本地目录加载插件，并在每次改动时重新构建：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>vite build --watch</code></pre>
+
+<ul>
+<li><code>package.json</code> 带 <code>name</code> 和 <code>exports</code> 的本地目录，会通过它们解析 <code>./gui-experimental</code>。没有这两个字段时，加载根目录下的 <code>gui-experimental.cjs</code>（或 <code>.js</code>）。入口必须是 <code>.cjs</code> 或 <code>.js</code>；其它文件会被忽略。</li>
+<li>每次重新构建都会在每个窗口和主进程里重载该插件的 GUI。服务器入口不会重启。</li>
+<li>已安装包的 GUI 只随版本变化。</li>
+<li>在 <code>opencode.json(c)</code> 里修改插件的 <code>options</code> 会重载插件。</li>
+<li><code>opencode plugin update</code> 在更新完成后替换包的 GUI。</li>
+<li><strong>Settings &gt; Extensions &gt; Plugins</strong> 列出插件并带一个开关，可以关掉它的 GUI。要移除插件，把它从 <code>opencode.json(c)</code> 里删掉，或运行 <code>opencode plugin remove &lt;package&gt;</code>。</li>
+</ul>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>应用自带的插件保留了自己的 id。如果你的插件 id 是其中之一、用 <code>.</code> 嵌在它们下面、有别的 id 嵌在它下面、或在 <code>opencode</code> 命名空间里，它的 GUI 不会加载，并且 <strong>Settings &gt; Extensions &gt; Plugins</strong> 会把它列为未加载。</p>
+</aside>
+
+<h2>定义 GUI 插件</h2>
+<p><code>Plugin.define</code> 声明插件运行在哪些系统上、它存储的窗口状态、它的图标和文案。宿主会在任何 setup 运行之前读取这些声明：</p>
+<div class="term-head"><span>src/gui/definition.ts</span><span>TypeScript</span></div>
+<pre><code>import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  os: ["macos", "linux"],
+  stores: {
+    prefs: Store.global(Schema.Struct({ enabled: Schema.Boolean }), { enabled: true }),
+  },
+  i18n: {
+    en: { title: "Acme", "command.open": "Open Acme" },
+    de: { title: "Acme", "command.open": "Acme öffnen" },
+  },
+})</code></pre>
+
+<ul>
+<li>宿主把 id 给插件，即 <code>ctx.id</code>：服务器部分的 <code>id</code>，没有服务器部分的包则是包名（本地目录没有 <code>name</code> 时是目录名）。插件创建的所有 id 都会加上这个前缀：命令（<code>&lt;id&gt;.&lt;command&gt;</code>）、面板键（<code>&lt;id&gt;:&lt;tab&gt;</code>）、存储键（<code>plugin.&lt;id&gt;.&lt;key&gt;</code>），以及它提供的<a href="#sec-14">契约和 Ipc</a> 的 id。</li>
+<li><code>os</code> 把插件限制到某些操作系统。省略它则所有系统都运行。<code>os</code> 不包含当前系统的插件不会运行，<strong>Settings &gt; Extensions &gt; Plugins</strong> 会保留它的行并显示「此系统不可用」。</li>
+<li><code>stores</code> 为窗口声明<a href="#sec-58">存储状态</a>。通过 <code>ctx.stores.&lt;key&gt;</code> 读取。</li>
+<li><code>icons</code> 声明插件<a href="#sec-21">自己的图标</a>，每个图标是一段 SVG 文件文本。通过 <code>ctx.icons.&lt;name&gt;</code> 读取图标名。</li>
+<li><code>i18n</code> 按语言保存文案。每种语言都内联写全；英文会补齐其它语言缺的键。用 <code>ctx.t(key, params)</code> 和 <code>ctx.plural(key, count)</code> 读取。在窗口里，<code>ctx.t</code> 还会读取应用的共享键，比如 <code>common.*</code>。在 <code>main</code> 里，缺失的键返回键名本身。</li>
+<li>定义 <code>setup</code>、<code>main</code>，或两者都定义。两者都没有的 GUI 无法加载。</li>
+<li>不带 setup 时，<code>Plugin.define</code> 把声明作为 <code>Plugin.Declarations</code> 返回，其它文件里的 setup 可以据此获得类型。<code>Plugin.Definition</code> 是完整定义的类型。</li>
+<li>插件不声明它提供或使用的契约。它在运行时提供和读取它们；见<a href="#sec-14">契约与 Token</a>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Declarations {
+  os?: ("macos" | "windows" | "linux")[]
+  stores?: Record&lt;string, StoreDeclaration&gt;
+  icons?: Record&lt;string, string&gt;
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: SetupContext&lt;this&gt;): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise&lt;Cleanup | void&gt;
+}
+
+type Messages = Record&lt;string, string&gt;
+
+type Cleanup = () =&gt; void | Promise&lt;void&gt;</code></pre>
+
+<h3>拆分到多个文件</h3>
+<p>小的 GUI 插件放进 <code>src/gui.tsx</code> 就够了。更大的插件可以这样组织：在 <code>definition.ts</code> 里声明插件，把共享 token 放进 <code>contract.ts</code>，每个 setup 写在独立文件里，最后在 <code>src/gui.tsx</code> 里组合：</p>
+<div class="term-head"><span>目录结构</span><span></span></div>
+<pre><code>src/
+├── index.ts            服务器部分：来自 @opencode/plugin 的 Plugin.define
+├── rpc.ts              服务器部分与其客户端之间的 RPC 契约
+├── gui.tsx             ./gui-experimental 入口：export default Plugin.define({ ...definition, setup, main })
+└── gui/
+    ├── definition.ts   Plugin.define：os、stores、icons、i18n
+    ├── contract.ts     其它代码可以导入的 Token：Ipc、Contract、Registry
+    ├── window.tsx      窗口 setup：Plugin.Setup&lt;typeof definition&gt;
+    ├── main.ts         主进程 setup：Plugin.MainSetup（仅桌面端）
+    ├── page.tsx        面板和页面渲染的组件
+    ├── icons/logo.svg  插件自己的图标
+    └── i18n/en.ts      英文文案</code></pre>
+
+<p>窗口启动时会对整个 <code>./gui-experimental</code> 文件求值，所以模块作用域和 <code>setup</code> 要保持轻量。在那些地方只注册贡献，把昂贵的工作放进组件、<code>createKeyed</code> 或 <code>createLatest</code> 里。</p>
+
+<p>对更大的插件：先声明插件，从声明给每个 setup 定型，再用它们定义插件：</p>
+<div class="term-head"><span>src/gui/definition.ts</span><span>TypeScript</span></div>
+<pre><code>import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
+})</code></pre>
+<div class="term-head"><span>src/gui/window.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import type { Plugin } from "@opencode/plugin/gui"
+import { Notes } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup&lt;typeof definition&gt; = (ctx) =&gt; {
+  ctx.provide(Notes, { count: () =&gt; ctx.stores.notes.value.count })
+}</code></pre>
+<div class="term-head"><span>src/gui/main.ts</span><span>TypeScript</span></div>
+<pre><code>import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) =&gt; {
+  ctx.log.write("info", "acme started")
+}</code></pre>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin/gui"
+import { definition } from "./gui/definition"
+import { main } from "./gui/main"
+import { setup } from "./gui/window"
+
+export default Plugin.define({ ...definition, setup, main })</code></pre>
+
+<ul>
+<li><code>Plugin.Setup&lt;typeof definition&gt;</code> 是窗口 setup 的类型。它按声明的 stores 给 <code>ctx.stores</code> 定型，按声明的图标给 <code>ctx.icons</code> 定型。</li>
+<li><code>Plugin.MainSetup</code> 是主进程 setup 的类型；<code>Plugin.Cleanup</code> 是任一 setup 可返回的清理函数类型。</li>
+<li>从 <code>@opencode/plugin/gui</code> 导入注册表、token 和辅助工具，例如 <code>Command</code>、<code>SettingsPage</code>、<code>Panel</code>、<code>Slot</code>、<code>Contract</code>、<code>Ipc</code>、<code>Registry</code>、<code>Store</code>、<code>createKeyed</code>、<code>usePlugin</code>、<code>bindPlugin</code>。</li>
+<li>仅主进程可用的注册表（如 <code>MenubarItem</code>）从 <code>@opencode/plugin/gui/main</code> 导入。</li>
+</ul>
+
+<h2>共享上下文（Shared context）</h2>
+<p>两个 setup 都会收到插件的选项、OpenCode 服务器的客户端和应用元数据，与服务器、TUI 部分一样。</p>
+
+<h3>选项（Options）</h3>
+<p><code>ctx.options</code> 保存插件在 <code>opencode.json(c)</code> 条目里的 <code>options</code>：与服务器部分拿到的值相同：</p>
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "plugins": [{ "package": "opencode-acme-plugin", "options": { "team": "core" } }],
+}</code></pre>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>setup(ctx) {
+  const team = ctx.options.team
+}</code></pre>
+
+<ul>
+<li>修改选项会重载插件。</li>
+</ul>
+
+<h3>服务器客户端（Server client）</h3>
+<p><code>ctx.client</code> 是运行该插件的服务器的 OpenCode 客户端：也就是桌面应用自己的服务器。用它通过 <a href="build-plugins-rpc.html">RPC</a> 调用你的服务器部分：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Command } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+ctx.add(Command, () =&gt; ({
+  id: "search",
+  title: ctx.t("command.search"),
+  run: async () =&gt; {
+    const result = await ctx.client.rpc(Acme).search({ query: "todo" })
+    console.log(result)
+  },
+}))</code></pre>
+
+<ul>
+<li>在调用处读取 <code>ctx.client</code>。该服务器重启后它会变化。</li>
+<li>服务器不可达期间，每次调用都会 reject。</li>
+</ul>
+
+<h3>应用元数据（App metadata）</h3>
+<p><code>ctx.app</code> 描述正在运行的应用：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)</code></pre>
+
+<ul>
+<li><code>name</code> 是 <code>"opencode"</code>，与服务器插件的 <code>ctx.app.name</code> 相同。</li>
+<li><code>platform</code> 在 Electron 应用和 <code>main</code> 里是 <code>"desktop"</code>，在浏览器标签页里是 <code>"web"</code>。</li>
+<li><code>packaged</code> 在桌面应用以打包形式运行时为 <code>true</code>。在 Web 上永远是 <code>false</code>。</li>
+<li>服务器插件会拿到 <code>name</code>、<code>version</code> 和 <code>channel</code>；TUI 插件拿到 <code>version</code> 和 <code>channel</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}</code></pre>
+
+<h2>契约与 Token（Contracts and tokens）</h2>
+<p>Token 让 GUI 插件跨进程、以及彼此之间通信，而不必导入对方的运行时代码。把每个 token 放进 <code>contract.ts</code>。一个 token 只持有它的种类和 id（<code>Ipc</code> 还持有 schema），所以其它插件可以不导入你的运行时代码就导入它。</p>
+
+<ul>
+<li><code>ctx.provide(token, impl)</code> 提供你自己的某个 token：窗口 setup 里的 <code>Contract</code>，或 <code>main</code> 里的 <code>Ipc</code>。</li>
+<li><code>ctx.use(token)</code> 跟随其它插件提供的契约或 <code>Ipc</code>。它返回一个 <a href="#sec-77">Live</a> 访问器。</li>
+<li><code>ctx.main(ipc)</code> 返回你自己 <code>main</code> 提供的某个 <code>Ipc</code> 的客户端。</li>
+</ul>
+
+<p>插件只能提供 id 等于自己 id、或以自己 id 开头（形如 <code>&lt;id&gt;.&lt;name&gt;</code>）的 token。其它 id 会让 <code>ctx.provide</code> 抛错，id 超出自己的 <code>Ipc</code> 会让 <code>ctx.main</code> 抛错。本页示例用 <code>acme</code> 作为插件 id，所以它们的 token id 以 <code>acme.</code> 开头：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>Contract.define&lt;AcmeBadge, "acme.badge"&gt;("acme.badge") // 插件 acme 可以提供它。
+Contract.define&lt;AcmeBadge, "badge"&gt;("badge") // 在插件 acme 里 ctx.provide 会抛错。</code></pre>
+
+<h3>契约（Contracts）</h3>
+<p>当一个插件的窗口 setup 要向其它插件的窗口 setup 暴露 API 或 Solid 组件时，用 <code>Contract.define</code>：</p>
+<div class="term-head"><span>src/gui/contract.ts</span><span>TypeScript</span></div>
+<pre><code>import type { JSX } from "solid-js"
+import { Contract } from "@opencode/plugin/gui"
+
+export interface AcmeBadge {
+  Badge(props: { readonly label: string }): JSX.Element
+  count(): number
+}
+
+export const AcmeBadge = Contract.define&lt;AcmeBadge, "acme.badge"&gt;("acme.badge")</code></pre>
+
+<p>在窗口 setup 里用 <code>ctx.provide</code> 提供它。契约里含组件时，在 setup 期间用 <code>bindPlugin</code> 包一层。这样组件内部的 <code>usePlugin()</code> 读到的是提供方（provider）的上下文，而不是消费方的：</p>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { AcmeBadge } from "./gui/contract"
+
+export default Plugin.define({
+  i18n: { en: { title: "Acme" } },
+  setup(ctx) {
+    ctx.provide(AcmeBadge, {
+      Badge: bindPlugin((props: { readonly label: string }) =&gt; (
+        &lt;span&gt;
+          {ctx.t("title")}: {props.label}
+        &lt;/span&gt;
+      )),
+      count: () =&gt; 42,
+    })
+  },
+})</code></pre>
+
+<ul>
+<li>给被 <code>bindPlugin</code> 包住的组件标注 props 类型，如 <code>bindPlugin((props: FileTreeProps) =&gt; ...)</code>。TypeScript 在 <code>ctx.provide</code> 内部推不出来。</li>
+<li>数据方法（如 <code>count</code>）不要包。</li>
+<li><code>ctx.provide</code> 返回一个函数，可提前撤回契约。宿主也会在当前属主结束时撤回它，否则在插件停止时撤回。</li>
+</ul>
+
+<h3>使用其它插件的契约</h3>
+<p>把 <code>contract.ts</code> 从你的包里导出（例如作为 <code>./contract</code>），其它插件就能导入它的 token。另一个插件用 <code>ctx.use(token)</code> 跟随该契约。访问器的值会随着提供方启动、停止、重启而变化，所以要在使用处读取：</p>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Plugin, Slot } from "@opencode/plugin/gui"
+import { AcmeBadge } from "opencode-acme-plugin/contract"
+
+export default Plugin.define({
+  setup(ctx) {
+    const badge = ctx.use(AcmeBadge)
+
+    const count = () =&gt; {
+      const live = badge()
+
+      return live.status === "active" ? live.value.count() : 0
+    }
+
+    ctx.add(Slot, { at: "window.bottom", render: () =&gt; &lt;span&gt;{count()}&lt;/span&gt; })
+  },
+})</code></pre>
+
+<ul>
+<li><code>ctx.use</code> 对同一个 token 每次调用返回同一个访问器。</li>
+<li>提供方不在线时，消费方继续工作。见<a href="#sec-77">活性依赖与失败处理</a>。</li>
+</ul>
+
+<h3>主进程与窗口之间的 IPC</h3>
+<p>用 <code>Ipc.define</code> 加 Effect <code>Schema</code> 编解码器，在 <code>main</code> 和 <code>setup</code> 之间定义一个类型化桥梁。<code>main</code> 用 <code>ctx.provide</code> 实现它，窗口通过 <code>ctx.main</code> 调用它：</p>
+<div class="term-head"><span>src/gui/contract.ts</span><span>TypeScript</span></div>
+<pre><code>import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const KeepAwake = Ipc.define({
+  id: "acme.awake",
+  methods: {
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
+  },
+})</code></pre>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const awake = ctx.main(KeepAwake)
+
+await awake.setScreenActive(true)</code></pre>
+
+<ul>
+<li>其它插件用 <code>ctx.use(KeepAwake)</code> 跟随你的 <code>Ipc</code>，与契约一样。</li>
+<li>状态、事件和提供方详见<a href="#sec-71">定义并提供 Ipc</a>。</li>
+</ul>
+
+<h3>插件自有的注册表（Registries your plugin owns）</h3>
+<p>用 <code>Registry.define</code> 定义一份你的插件拥有的清单。其它插件用 <code>ctx.add</code> 贡献条目，你的插件用 <code>ctx.list</code> 读取它们：</p>
+<div class="term-head"><span>src/gui/contract.ts</span><span>TypeScript</span></div>
+<pre><code>import { Registry } from "@opencode/plugin/gui"
+
+export interface Exporter {
+  readonly id: string
+  readonly title: string
+  run(text: string): void
+}
+
+export const Exporter = Registry.define&lt;Exporter&gt;("acme.exporter")</code></pre>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>// 另一个插件贡献一个条目。
+ctx.add(Exporter, () =&gt; ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) =&gt; upload(text) }))
+
+// 属主列出每个贡献。响应式：在 render 或 memo 里读取。
+const exporters = () =&gt; ctx.list(Exporter)</code></pre>
+
+<h2>窗口（The window）</h2>
+<p>插件的 <code>setup</code> 在每个桌面应用窗口里运行。把它传给插件 <code>./gui-experimental</code> 文件里来自 <code>@opencode/plugin/gui</code> 的 <code>Plugin.define</code>。<code>setup</code> 是同步的，可以返回一个清理函数；见<a href="#sec-78">生命周期与清理</a>：</p>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Command, Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  i18n: { en: { open: "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () =&gt; ({
+      id: "open",
+      title: ctx.t("open"),
+      run: () =&gt; ctx.system.openExternal("https://acme.example"),
+    }))
+  },
+})</code></pre>
+
+<h2>组件（Components）</h2>
+<p>在 Solid 组件里，调用 <code>usePlugin&lt;typeof definition&gt;()</code> 拿到与 <code>setup</code> 收到的同一个上下文对象。从声明所在文件给它定型（见<a href="#sec-9">拆分到多个文件</a>），组件与定义之间就不必互相导入：</p>
+<div class="term-head"><span>src/gui/window.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function StatusLabel() {
+  const ctx = usePlugin&lt;typeof definition&gt;()
+
+  return &lt;span&gt;{ctx.t("title")}&lt;/span&gt;
+}
+
+export const setup: Plugin.Setup&lt;typeof definition&gt; = (ctx) =&gt; {
+  ctx.add(Slot, { at: "window.bottom", render: () =&gt; &lt;StatusLabel /&gt; })
+}</code></pre>
+
+<p><code>usePlugin</code> 在插件贡献之外会抛错。在被另一个插件渲染的组件里，它返回那个插件的上下文，所以你在契约上提供的组件要用 <code>bindPlugin</code> 包住；见<a href="#sec-15">契约</a>。</p>
+
+<h2>图标（Icons）</h2>
+<p>SDK 的每个 <code>icon</code> 字段，以及 <code>ctx.ui.Icon</code>，都接受一个 <code>IconName</code>：应用自带图标之一的名字，或你的插件声明的一个图标的名字。其它字符串无法通过编译：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.add(TitlebarItem, () =&gt; ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () =&gt; sync() }))</code></pre>
+
+<h3>声明自己的图标</h3>
+<p>应用没有的图稿（比如你产品的标志），把 SVG 文件放进你的包里，并在 <code>icons</code> 里声明。用 <code>?raw</code> 导入文件，<code>gui()</code> 预设会把它打包成文本：</p>
+<div class="term-head"><span>src/gui/definition.ts</span><span>TypeScript</span></div>
+<pre><code>import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})</code></pre>
+
+<p>然后在任何接受 <code>IconName</code> 的地方传 <code>ctx.icons</code> 里的图标名：</p>
+<div class="term-head"><span>src/gui/window.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup&lt;typeof definition&gt; = (ctx) =&gt; {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () =&gt; ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () =&gt; &lt;ctx.ui.Icon name={ctx.icons.logo} size="small" /&gt; })
+}</code></pre>
+
+<ul>
+<li><code>ctx.icons</code> 里每个声明的图标有一个名字。没声明的名字无法通过编译。</li>
+<li>宿主会在 <code>setup</code> 运行前注册你的图标，并在插件消失时撤回它们。</li>
+<li>不是 SVG 文档的值会让插件在启动时失败。</li>
+<li>要让 <code>?raw</code> 导入通过类型检查，在 <code>tsconfig.json</code> 的 <code>types</code> 里加上 <code>"vite/client"</code>。</li>
+</ul>
+
+<h3>绘制图标</h3>
+<p>宿主绘制你的图标与绘制它自己的一样：按展示位置的尺寸和颜色：</p>
+<div class="term-head"><span>src/gui/icons/logo.svg</span><span>XML · SVG</span></div>
+<pre><code>&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none"&gt;
+  &lt;circle cx="8" cy="8" r="6.5" stroke="currentColor" /&gt;
+  &lt;path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" /&gt;
+&lt;/svg&gt;</code></pre>
+
+<ul>
+<li><code>viewBox</code> 圈定绘图区域；没有时用 <code>width</code> 和 <code>height</code>。宿主会把它缩放到 14、16 或 20 像素，所以请在 16 像素网格上作画。</li>
+<li>用 <code>currentColor</code> 绘制。图标就会取所在位置的颜色，比如药丸的 <code>tone</code> 或菜单行的弱化图标色。</li>
+<li>图里的 <code>id</code> 属于整个窗口。保持 id 唯一，或干脆不写。</li>
+</ul>
+
+<h3>让图标动起来</h3>
+<p>图标可以动，比如表示工作正在进行。在文件内部使用 SVG 动画元素，例如 <code>animate</code> 和 <code>animateTransform</code>：</p>
+<div class="term-head"><span>src/gui/icons/working.svg</span><span>XML · SVG</span></div>
+<pre><code>&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none"&gt;
+  &lt;circle cx="8" cy="8" r="6.5" stroke="currentColor" /&gt;
+  &lt;circle cx="8" cy="8" r="2" fill="currentColor"&gt;
+    &lt;animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" /&gt;
+  &lt;/circle&gt;
+&lt;/svg&gt;</code></pre>
+
+<ul>
+<li>展示该图标的每个位置都同步移动。</li>
+<li>只要宿主再次渲染该位置（比如药丸的 <code>show</code> 再次运行），动画就会继续。</li>
+<li>用户开启了「减少动态效果」时，宿主会把每个图标停在第一帧。把第一帧做成静止状态的样子。</li>
+<li>没有任何位置展示的图标不占任何成本。</li>
+</ul>
+
+<h3>被存储的图标名</h3>
+<p>图标名是一个字符串，形如 <code>&lt;plugin id&gt;:&lt;name&gt;</code>，所以宿主会像存储自己图标名一样存储它。<a href="#sec-44">输入框的附注或引用</a>会把它与草稿和已发送消息保存在一起，<a href="#sec-29">已关闭的标签页</a>会把它与会话布局保存在一起：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element &lt;button id="submit"&gt;Save&lt;/button&gt;',
+  comment: "",
+})</code></pre>
+
+<ul>
+<li>插件不在线时，图标不绘制任何内容但保持尺寸。</li>
+<li>在使用处从 <code>ctx.icons</code> 读取名字。手写的名字无法通过编译。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>type IconName = AppIconName | PluginIconName
+
+// 应用自带图标之一，例如 "folder"、"github" 或 "terminal"。
+type AppIconName = string
+
+// 插件声明的图标之一的名字，来自 ctx.icons。
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record&lt;string, string&gt;
+}
+
+interface SetupContext&lt;D&gt; extends Context {
+  icons: Record&lt;string, PluginIconName&gt;
+}</code></pre>
+
+<h2>注册表（Registries）</h2>
+<p>把一个注册表 token 和一个条目传给 <code>ctx.add</code>，即可向窗口外壳（shell）做贡献。当条目要跟随响应式状态（比如语言）时，把条目作为函数 <code>() =&gt; item | undefined</code> 传入。宿主会在函数读到的内容变化时再次执行它。返回 <code>undefined</code> 表示撤回条目，直到函数再次返回一个条目为止：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.add(Command, () =&gt; ({ id: "open", title: ctx.t("command.open"), run: () =&gt; open() }))</code></pre>
+
+<ul>
+<li>在函数内部用 <code>ctx.t</code> 读取标签。在固定条目里读取一次的标签，会保留读取时的语言。</li>
+<li>当条目有字面量类型字段（如 <code>hidden: true</code>、某个 <code>section</code>、<code>icon</code> 或菜单名）时，给函数标注返回类型：<code>(): Command =&gt; ({ ... })</code>。否则 TypeScript 会把字段扩宽成 <code>string</code> 或 <code>boolean</code>，没有重载能匹配。</li>
+<li>从不变化的条目（比如某个<a href="#sec-39">样式</a>）直接传固定条目。</li>
+<li>宿主会让某些对象保持稳定：面板从 <code>list</code> 返回的标签页，以及带 <code>render</code> 的条目（如面板和设置页）。从 getter 里读它们的标签，例如 <code>get title() { return ctx.t("title") }</code>。</li>
+<li><code>ctx.add</code> 返回一个函数，可提前撤回条目。</li>
+</ul>
+
+<h3>命令（Commands）</h3>
+<p><code>Command</code> 向命令面板、<strong>Settings &gt; Shortcuts</strong>、以及可选的输入框 <code>/</code> 菜单添加动作。宿主把命令发布为 <code>&lt;plugin id&gt;.&lt;command id&gt;</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Command } from "@opencode/plugin/gui"
+
+ctx.add(
+  Command,
+  (): Command =&gt; ({
+    id: "toggle",
+    title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
+    group: ctx.t("command.category.view"),
+    section: "terminal",
+    bind: "ctrl+`",
+    slash: { name: "notes", after: "open" },
+    featured: true,
+    enabled: !!ctx.sessions.current(),
+    run: () =&gt; {
+      const session = ctx.sessions.current()
+
+      if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
+    },
+  }),
+)</code></pre>
+
+<ul>
+<li><code>title</code> 是面板里的标签，<code>description</code> 是第二行，<code>group</code> 是分类，都以翻译后的文本呈现。</li>
+<li><code>keywords</code> 保存面板额外匹配的词，用空格分隔。</li>
+<li><code>section</code> 是 <strong>Settings &gt; Shortcuts</strong> 的分区。默认 <code>general</code>。</li>
+<li><code>bind</code> 是默认键位，例如 <code>mod+shift+t</code>。用户可以修改。</li>
+<li><code>slash</code> 让命令同时出现在 <code>/</code> 菜单里。带 <code>arguments: true</code> 时，名称后的文本会传给 <code>run(input)</code>。</li>
+<li><code>hidden</code> 把命令从面板里藏起来，但它的键位仍然有效。</li>
+<li><code>suggested</code> 让命令在启用期间同时列在 <strong>Suggested</strong> 下；<code>featured</code> 让它在面板无查询打开时列出。</li>
+<li><code>enabled: false</code> 把命令从面板里移除并关闭其键位。它是响应式的。</li>
+<li><code>scope</code> 是一个 CSS 选择器，键盘焦点必须落在其中键位才生效。带 <code>editable</code> 时，文本框有焦点时绑定也会触发。</li>
+<li>要在自己的代码里运行命令，用 <code>ctx.commands.run</code>；见<a href="#sec-56">运行命令</a>。</li>
+</ul>
+
+<p>从键位触发时，<code>run</code> 可以返回 <code>false</code> 来拒绝这个按键。事件随后继续流向目标，就像命令没有键位一样。下面这个命令在用户于空提示词里按 Enter 时继续会话，其余的 Enter 都留给输入框：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.add(Command, () =&gt; ({
+  id: "continue",
+  title: ctx.t("command.continue"),
+  bind: "enter",
+  editable: true,
+  hidden: true,
+  run: () =&gt; {
+    const composer = ctx.screen.current()?.composer
+    const session = ctx.sessions.current()
+
+    if (!composer?.focused() || composer.text().trim() || !session) return false
+    void session.server.client.session.prompt({ sessionID: session.id, text: ctx.t("continue") })
+  },
+}))</code></pre>
+
+<ul>
+<li>同步返回 <code>false</code>；返回 Promise 表示接管了这个按键。</li>
+<li>从面板或斜杠命令返回 <code>false</code> 没有其它效果。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Command {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | false | Promise&lt;void&gt;
+}</code></pre>
+
+<h3>面板（Panels）</h3>
+<p><code>Panel</code> 向会话的侧边区域（<code>region: "side"</code>）贡献标签页。用户可以把标签页拖到时间线下方的底部窗格：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { Panel, type PanelTab } from "@opencode/plugin/gui"
+
+const mainTab: PanelTab = {
+  id: "main",
+  get title() {
+    return ctx.t("panel.title")
+  },
+  closable: "compact",
+  fallback: true,
+}
+
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  mobile: {
+    get title() {
+      return ctx.t("panel.title")
+    },
+    order: 45,
+    kind: "menu",
+    icon: "file-tree",
+  },
+  list: (input) =&gt; (input.open.includes("main") ? [mainTab] : []),
+  render: (props) =&gt; &lt;NotesView session={props.session} screen={props.screen} tab={props.tab} /&gt;,
+})</code></pre>
+
+<p>面板的所有回调（<code>list</code>、<code>render</code>、<code>focus</code>、<code>enter</code>、<code>close</code>、<code>closed</code>、<code>restore</code>、<code>normalize</code>）都收到一个输入对象：</p>
+
+<ul>
+<li>在使用处把 <code>props.session</code> 和 <code>props.tab</code> 作为响应式 getter 读取。永远不要在 <code>render</code> 顶部解构它们：当用户从会话 A 切到会话 B 时，面板保持挂载，<code>props.session</code> 原地更新。</li>
+<li><code>props.screen</code> 是拥有 <code>SessionScreen</code> 的常量（<code>file</code>、<code>comment</code>、<code>composer</code>）。它的动作始终指向被路由的会话。</li>
+<li>标签页未变时，<code>list</code> 要返回同一个 <code>PanelTab</code> 对象，宿主就不会重新挂载它的触发器。从 getter 里读标签，这样不用新对象也能跟随语言。</li>
+</ul>
+
+<p>面板的回调：</p>
+<ul>
+<li><code>list</code> 返回要展示的标签页。<code>input.open</code> 持有本插件存储在该会话里的标签页 id。它是响应式的。</li>
+<li><code>render</code> 渲染一个标签页的内容，仅一次。</li>
+<li><code>focus</code> 在标签页被选中时运行。区域初始挂载的那次选中 <code>restored</code> 为 <code>true</code>。</li>
+<li><code>enter</code> 在用户用切换按钮在某个标签页上打开侧边区域时、该标签页上屏之后运行。把键盘焦点移到标签页自己的目标上，比如文本框。焦点仍在区域外时，宿主会聚焦该区域。</li>
+<li><code>close</code> 在宿主移除标签页之后运行。</li>
+<li><code>closed</code> 和 <code>restore</code> 让用户重新打开已关闭的标签页；见<a href="#sec-29">重新打开已关闭的标签页</a>。</li>
+<li><code>normalize</code> 返回存储标签页 id 的规范形式——当一个 id 有多种存储写法时用。</li>
+</ul>
+
+<p>面板的选项：</p>
+<ul>
+<li><code>mobile</code> 添加面板的窄屏视图。带 <code>cached: true</code> 时，用户查看别的视图期间该视图保持挂载。默认每次显示时重新挂载。</li>
+<li><code>wide</code> 在侧边区域打开时请求更宽的会话最小宽度。</li>
+<li><code>width</code> 给面板一个自己的侧边区域宽度；见<a href="#panel-width">面板宽度</a>。</li>
+<li><code>transient</code> 面板的标签页不会被恢复。</li>
+</ul>
+
+<h4 id="panel-width">面板宽度</h4>
+<p>默认情况下，侧边区域里的所有标签页共享会话的宽度。当你的面板需要比「审查」或「浏览器」更小（或更大）的空间时，设置 <code>width</code>。传 CSS 像素，或用 <code>"narrow"</code> 表示区域的最窄值：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) =&gt; (input.open.includes("quota") ? [tab] : []),
+  render: () =&gt; &lt;Quota /&gt;,
+})</code></pre>
+
+<ul>
+<li>宽度在侧边窗格显示该面板的某个标签页时生效。其它标签页保持会话的宽度。</li>
+<li>当用户在该面板的某个标签页上拖动分隔条时，宿主会把那个宽度保存为该面板全应用范围的宽度，替代 <code>width</code>。</li>
+<li>宿主保持会话处于其最小宽度，且区域至少 <code>"narrow"</code>。</li>
+<li><code>ctx.layout.side.width(panel)</code> 读取保存的宽度，<code>ctx.layout.side.resize(panel, width)</code> 保存一个宽度，效果与拖动相同。保存的宽度对没有 <code>width</code> 的面板也生效。</li>
+</ul>
+
+<p>标签页的选项：</p>
+<ul>
+<li><code>id</code> 是标签页 id；其宿主键为 <code>&lt;plugin id&gt;:&lt;id&gt;</code>。<code>title</code> 是其无障碍名称；<code>label</code> 渲染自定义触发内容。</li>
+<li><code>pinned</code> 标签页不打开也列出，排在最前，且永远不会被关闭或拖动。</li>
+<li><code>draggable</code> 允许用户重排标签页。默认 <code>true</code>。</li>
+<li><code>closable</code> 设置关闭按钮的样子：<code>"compact"</code>、<code>"hover"</code>，或 <code>false</code> 表示没有。</li>
+<li><code>transient</code> 标记一个启动器标签页，比如 <strong>Open file</strong>，它会被下一次预览替换。</li>
+<li><code>fallback</code> 选择加入「存储的选中项缺失时」的回退选择。</li>
+<li>同一 <code>group</code> 的标签页共享一个保持挂载的 render。</li>
+<li><code>missing</code> 给标签页加删除线，比如文件已不存在时。</li>
+<li><code>hidden</code> 让一个被恢复的标签页保持列出、可选中，但不绘制，因为其内容还未知。</li>
+<li><code>file</code> 是标签页展示的工作区路径，会作为会话打开的文件之一列出。</li>
+<li><code>tabbable</code> 把标签页面板放进 Tab 焦点顺序，适用于没有可聚焦元素的内容。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Panel {
+  id: string
+  region: "side"
+  mobile?: MobileView
+  wide?: boolean
+  width?: number | "narrow"
+  transient?: boolean
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps &amp; { restored: boolean }): void
+  enter?(input: PanelProps): void
+  close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+  cached?: boolean
+}</code></pre>
+
+<h3>重新打开已关闭的标签页</h3>
+<p>宿主为用户关闭的每个侧边标签页保留一条记录。焦点在侧边区域时，⌘⇧T 重新打开最近关闭的一个。侧边区域的 <strong>New tab</strong> 视图会把带 <code>file</code> 的已关闭标签页列在 <strong>Recently closed</strong> 下。添加 <code>closed</code> 和 <code>restore</code> 可以控制标签页在那里如何呈现、以及如何回来：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) =&gt; input.open.map(pageTab),
+  render: (props) =&gt; &lt;PageView tab={props.tab} /&gt;,
+  closed: (input) =&gt; {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) =&gt; {
+    if (input.data) openPage(input.session, input.data)
+  },
+})</code></pre>
+
+<ul>
+<li><code>closed</code> 在用户关闭标签页时运行。此刻就把重新打开所需的东西捕获下来：返回该行如何呈现、以及 <code>restore</code> 需要的 <code>data</code>；标签页回不来时返回 <code>false</code>。</li>
+<li><code>title</code> 默认取标签页标题，<code>icon</code> 默认取面板的 mobile 图标。带 <code>file</code> 的标签页显示其文件图标，文件夹作为 <code>detail</code>。</li>
+<li>宿主会存储这条记录，所以 <code>data</code> 要保持很小，比如一个 URL。</li>
+<li><code>restore</code> 收到被关闭标签页的 <code>id</code> 和 <code>closed</code> 返回的 <code>data</code>。没有 <code>restore</code> 时，宿主按同样的键再次打开。</li>
+<li>没有 <code>closed</code> 时，非 <code>transient</code> 的标签页按其标题列出，并在同样的键下重新打开。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
+}</code></pre>
+
+<h3>设置页面（Settings pages）</h3>
+<p><code>SettingsPage</code> 向 <strong>Settings</strong> 贡献一个页面、向宿主页贡献一个分区（<code>page: "general"</code> 或 <code>page: "servers"</code>）、或向宿主的 General 分区贡献行（<code>page: "general", section: "general"</code>）：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { SettingsPage } from "@opencode/plugin/gui"
+import { AcmeSettings } from "./settings"
+
+ctx.add(SettingsPage, {
+  id: "acme",
+  icon: "server",
+  get title() {
+    return ctx.t("title")
+  },
+  get entries() {
+    return [{ id: "sync", title: ctx.t("settings.sync"), keywords: "sync remote" }]
+  },
+  render: (input) =&gt; &lt;AcmeSettings highlight={input.target} /&gt;,
+})</code></pre>
+
+<ul>
+<li><code>id</code> 是页面在设置里的 tab 值（<code>/settings?tab=&lt;id&gt;</code>），也是 <code>ctx.layout.settings</code> 的参数。</li>
+<li><code>page</code> 让你向宿主页贡献分区而不是整页。带 <code>section: "general"</code> 时，向该页的 General 分区加行。</li>
+<li><code>title</code> 和 <code>icon</code> 是页面的导航标签和图标。</li>
+<li><code>entries</code> 是搜索元数据，不挂载页面也会被索引。搜索命中某个条目时，<code>render</code> 会以 <code>target</code> 收到它的 id。</li>
+<li>设置页带 <code>render</code>，所以宿主让它保持稳定。从 getter 里读它的标签和条目。</li>
+</ul>
+
+<p>用应用的设置组件渲染页面，让它看起来像应用自己的页面，搜索也能命中它的行：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>const ui = ctx.ui
+
+const AcmeSettings = () =&gt; (
+  &lt;ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}&gt;
+    &lt;ui.SettingsSection title={ctx.t("settings.section")}&gt;
+      &lt;ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}&gt;
+        &lt;ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} /&gt;
+      &lt;/ui.SettingsRow&gt;
+    &lt;/ui.SettingsSection&gt;
+  &lt;/ui.SettingsLayout&gt;
+)</code></pre>
+
+<ul>
+<li>自己的整页渲染 <code>SettingsLayout</code>；宿主页上的分区（<code>page</code>）渲染 <code>SettingsSection</code>；宿主分区里的行（<code>section</code>）单独渲染 <code>SettingsRow</code>。</li>
+<li>行的 <code>id</code> 就是能「揭示」它的 <code>SettingEntry.id</code>：搜索会滚动到该行并高亮。</li>
+<li>它们的 props 见<a href="#settings-components">设置组件</a>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}</code></pre>
+
+<h3>插槽（Slots）</h3>
+<p><code>Slot</code> 向四个窗口插槽之一渲染 UI：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "session.header",
+  order: 10,
+  render: (input) =&gt; &lt;UsageRing session={input.session} active={input.active} /&gt;,
+})</code></pre>
+
+<ul>
+<li><code>window.bottom</code> 是窗口底部的一条通栏，在 toast 之上。</li>
+<li><code>session.header</code> 是会话时间线的标题行。缓存的时间线在隐藏时保持挂载，且 <code>active</code> 为 <code>false</code>。</li>
+<li><code>session.location.menu</code> 向项目菜单添加条目，位于其位置信息之后。</li>
+<li><code>session.panel.end</code> 在侧边区域标签条末端放置动作。</li>
+<li><code>order</code> 对同一个插槽里的条目排序。</li>
+</ul>
+
+<p><code>session.location.menu</code> 会收到 <code>shown</code>，项目菜单打开期间为 <code>true</code>。只在它为 <code>true</code> 时订阅位置数据：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) =&gt; &lt;BranchStatus session={input.session} screen={input.screen} shown={input.shown} /&gt;,
+})</code></pre>
+
+<p>项目菜单是宿主菜单：用 <code>ctx.ui.MenuItem</code>、<code>MenuSub</code>、<code>MenuGroup</code>、<code>MenuSeparator</code> 渲染它的行，这样它们就能用键盘导航、并在选中时像宿主的行一样关闭菜单。见<a href="#menu-rows">菜单行</a>：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) =&gt; &lt;ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() =&gt; openUsage(input.session)} /&gt;,
+})</code></pre>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
+
+interface SlotMap {
+  "window.bottom": Record&lt;string, never&gt;
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+}</code></pre>
+
+<h3>菜单项（Menu items）</h3>
+<p><code>MenuItem</code> 向侧边面板的 <strong>+</strong> 菜单（<code>"session.panel"</code>）、<strong>Add server</strong> 菜单（<code>"server.add"</code>）、或 Settings 里每个服务器的行菜单（<code>"server.row"</code>）添加条目：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { MenuItem } from "@opencode/plugin/gui"
+
+ctx.add(MenuItem, (): MenuItem =&gt; {
+  const session = ctx.sessions.current()
+
+  return {
+    menu: "session.panel",
+    id: "open",
+    title: ctx.t("menu.open"),
+    icon: "folder",
+    keybind: `${ctx.id}.open`,
+    opened: !!session &amp;&amp; ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
+    run: () =&gt; {
+      if (session) ctx.layout.open(`${ctx.id}:main`, session)
+    },
+  }
+})</code></pre>
+
+<ul>
+<li><code>order</code> 升序排序条目，默认 <code>0</code>。</li>
+<li><code>server.row</code> 条目的 <code>run</code> 收到该行的服务器键。<code>when</code> 让条目只在某些行出现；<code>enabled</code> 让它在其它行以禁用态出现。</li>
+</ul>
+
+<p><code>session.panel</code> 条目同时也是启动器（launcher）。当用户在没有任何标签页时打开侧边区域，或在没有条目是 <code>primary</code> 时点击 <strong>+</strong>，宿主会显示列出启动器的 <strong>New tab</strong> 视图：</p>
+<ul>
+<li><code>icon</code> 是条目的图标；<code>keybind</code> 是一个已发布命令 id，条目会显示它的快捷键。</li>
+<li><code>description</code> 是启动器行里标题后面的简短弱化说明，比如一个数量。</li>
+<li><code>opened: true</code> 表示该条目打开的标签页已经打开。启动器列表会把它省掉，<strong>+</strong> 菜单仍然列出它。</li>
+<li><code>primary: true</code> 让 <strong>+</strong> 直接运行该条目而不是展示启动器。<code>order</code> 里第一个 primary 条目获胜。在没有标签页时打开侧边区域，仍会显示 <strong>New tab</strong> 视图，列出非 primary 且未打开的条目。</li>
+<li><code>ctx.layout.side.menu()</code> 列出所有插件的 <code>session.panel</code> 条目，供你做自己的启动器；见<a href="#sec-42">布局</a>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}</code></pre>
+
+<h3>标题栏项（Titlebar items）</h3>
+<p><code>TitlebarItem</code> 在窗口标题栏或标签页页脚渲染一个药丸按钮。它的标签在悬停时显示：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { TitlebarItem } from "@opencode/plugin/gui"
+
+ctx.add(TitlebarItem, (): TitlebarItem | undefined =&gt;
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () =&gt; sync() } : undefined,
+)</code></pre>
+
+<ul>
+<li><code>title</code> 是与 <code>label</code> 不同时的无障碍名称。</li>
+<li><code>busy</code> 显示加载指示并禁用药丸；<code>pressed</code> 显示为按下态。</li>
+<li><code>run</code> 在点击时运行。只展示不动作的条目可以省略。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface TitlebarItem {
+  id: string
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}</code></pre>
+
+<h3>输入框药丸（Composer pills）</h3>
+<p><code>ComposerPill</code> 在会话输入框上方那一行加一个药丸，与应用的后台工作和待办药丸并排。适合展示「属于用户当前会话」的状态，比如其分支的 pull request。药丸悬浮在时间线之上，所以药丸的出现或消失永远不会改变输入框的尺寸。这一行跟随用户的后台活动对齐方式，且不会出现在子智能体的会话里。</p>
+
+<p><code>show</code> 返回某个会话的药丸，返回 <code>undefined</code> 表示那个会话不显示。宿主会对每个挂载的输入框运行它，并在它读到的内容变化时再次运行。下面这个插件通过其服务器部分的 <a href="build-plugins-rpc.html">RPC</a> 列出每个会话目录的开放 pull request，并把它们显示为一个药丸：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { createStore } from "solid-js/store"
+import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { GitHub, type Pull } from "./rpc"
+
+const [pulls, setPulls] = createStore&lt;Record&lt;string, readonly Pull[]&gt;&gt;({})
+
+createKeyed(
+  () =&gt; ctx.sessions.current()?.directory,
+  (directory) =&gt;
+    void ctx.client
+      .rpc(GitHub)
+      .pulls({ directory })
+      .then((list) =&gt; setPulls(directory, list)),
+)
+
+ctx.add(ComposerPill, {
+  id: "pulls",
+  show: (input) =&gt; {
+    const list = pulls[input.session.directory] ?? []
+
+    if (list.length === 0) return undefined
+
+    return {
+      icon: "github",
+      label: ctx.plural("pulls", list.length),
+      tone: list.some((pull) =&gt; pull.checks === "failure") ? "danger" : undefined,
+      title: ctx.t("pulls.title"),
+      rows: list.map((pull) =&gt; ({
+        id: String(pull.number),
+        label: `#${pull.number} ${pull.title}`,
+        icon: pull.checks === "failure" ? "circle-x" : "circle-check",
+        tone: pull.checks === "failure" ? "danger" : "success",
+        detail: pull.branch,
+        run: () =&gt; ctx.system.openExternal(pull.url),
+      })),
+    }
+  },
+})</code></pre>
+
+<ul>
+<li><code>label</code> 是药丸的文本，过长会截断。<code>icon</code> 可选。</li>
+<li><code>tone</code> 给图标着色：<code>"success"</code>、<code>"warning"</code> 或 <code>"danger"</code>。</li>
+<li>应用没有的字形（比如一个会动的状态标记），可以<a href="#sec-22">声明自己的图标</a>并传 <code>ctx.icons.&lt;name&gt;</code>。它像其它图标一样接受 <code>tone</code>，只要 <code>show</code> 再次运行它的动画就会继续。</li>
+<li><code>rows</code> 让药丸点击后打开一个菜单，标题用 <code>title</code>（没有时用 <code>label</code>）。每行有自己的 <code>icon</code>、<code>tone</code> 和弱化的 <code>detail</code>，选中时运行 <code>run</code>；没有 <code>run</code> 的行只展示。</li>
+<li>没有 <code>rows</code> 时，药丸在点击时运行 <code>run</code>。</li>
+<li><code>title</code> 也是与 <code>label</code> 不同时的药丸无障碍名称。</li>
+<li><code>order</code> 把你的药丸排在其它插件药丸之中，最小者在前。应用自己的药丸在最前。</li>
+<li><code>show</code> 抛错只会让你的插件的贡献失败。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface ComposerPill {
+  id: string
+  order?: number
+  show(input: ComposerPillProps): ComposerPillView | undefined
+}
+
+interface ComposerPillProps {
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ComposerPillView {
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  title?: string
+  rows?: ComposerPillRow[]
+  run?(): void
+}
+
+interface ComposerPillRow {
+  id: string
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  detail?: string
+  run?(): void
+}
+
+type ComposerPillTone = "success" | "warning" | "danger"</code></pre>
+
+<h3>代码块（Code blocks）</h3>
+<p><code>CodeBlock</code> 把你列出的语言的围栏代码块渲染成自己的 UI，替代高亮源码。适合「画出来比源码更好读」的内容，比如 <code>```csv</code> 表格或 <code>```latex</code> 公式：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) =&gt; {
+    const rows = props.code.split("\n").map((line) =&gt; line.split(","))
+
+    if (rows.length &lt; 2) return undefined
+
+    return (
+      &lt;table&gt;
+        &lt;tbody&gt;
+          &lt;For each={rows}&gt;
+            {(row) =&gt; (
+              &lt;tr&gt;
+                &lt;For each={row}&gt;{(cell) =&gt; &lt;td&gt;{cell}&lt;/td&gt;}&lt;/For&gt;
+              &lt;/tr&gt;
+            )}
+          &lt;/For&gt;
+        &lt;/tbody&gt;
+      &lt;/table&gt;
+    )
+  },
+})</code></pre>
+
+<ul>
+<li><code>languages</code> 与围栏信息串的第一个词（小写）比较：<code>```CSV title="Q3"</code> 匹配 <code>csv</code>。宿主不解析别名，所以你接受的每个名字都要列出。</li>
+<li><code>render</code> 收到块的 <code>code</code>、<code>language</code> 和展示它的 <code>session</code>。返回 <code>undefined</code> 或 <code>null</code> 可以保留高亮源码，比如源码解析不了的时候。</li>
+<li>render 抛错会把错误记录在你的插件名下，该块显示其源码。你的其它贡献继续工作。</li>
+<li>多个插件列出同一语言时，第一个贡献者渲染它。你列出 <code>mermaid</code> 时，渲染器也会替换应用自带的 Mermaid 图。</li>
+</ul>
+
+<h4>流式（Streaming）</h4>
+<p>宿主只在块的闭合围栏到达后才渲染。块正在流式输出、或消息停在半块中间时，用户看到的是高亮源码；随后你的 UI 原地替换它。你的 render 永远不会看到半截块。</p>
+
+<h4>适用范围</h4>
+<table>
+<thead>
+<tr><th>表面</th><th>是否替换</th></tr>
+</thead>
+<tbody>
+<tr><td>时间线：助手文本和工具输出</td><td>是</td></tr>
+<tr><td>会话屏幕上的侧面板，例如 Markdown 预览</td><td>是</td></tr>
+<tr><td>会话屏幕上渲染的 <code>ctx.ui.Markdown</code></td><td>是</td></tr>
+<tr><td><code>ctx.ui.Code</code>，以及你自己的 <code>CodeBlock</code> render 里的 Markdown</td><td>否</td></tr>
+<tr><td>设置页面、对话框以及其它屏幕之外的表面</td><td>否</td></tr>
+</tbody>
+</table>
+
+<h4>布局与性能</h4>
+<ul>
+<li>没有插件列出的语言的块不占任何成本；只有被列出语言的块才会渲染你的 UI，且只在它的时间线行在屏时。</li>
+<li>块随你的 UI 伸缩。给异步内容一个最小高度，减少内容到达时时间线的抖动。</li>
+<li>块保留它的 Copy 按钮（复制的是源码），并把你的 <code>CodeBlockAction</code> 按钮叠放在其上端角落。</li>
+</ul>
+
+<h3>代码块动作（Code block actions）</h3>
+<p><code>CodeBlockAction</code> 在你列出的语言的代码块的 Copy 按钮旁添加一个按钮。<code>run</code> 收到与 <code>CodeBlock</code> render 相同的块：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) =&gt; runInTerminal(input.code, input.session),
+})</code></pre>
+
+<ul>
+<li>按钮在块的闭合围栏到达后才出现，所以永远不会对半截命令执行动作。</li>
+<li>按钮与 Copy 一起在悬停或键盘聚焦时浮现，排在 Copy 之前，按 <code>order</code> 升序。</li>
+<li>从 getter 读 <code>title</code>，让它跟随语言。</li>
+<li><code>run</code> 抛错或 reject 会记录在你的插件名下，不产生其它影响。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise&lt;void&gt;
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}</code></pre>
+
+<h3>链接处理器（Link handlers）</h3>
+<p><code>LinkHandler</code> 打开用户在消息或输入框芯片里点击的本地文件或自定义链接。在 <code>match</code> 返回 true 的处理器里，<code>priority</code> 最高的那个打开链接：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) =&gt; link.href.endsWith(".acme"),
+  open: (link) =&gt; openAcmeFile(link.href, link.session),
+  exists: (link) =&gt; acmeFileExists(link.href),
+})</code></pre>
+
+<ul>
+<li><code>href</code> 是目标：一个路径、一个 URL，或一个 <code>file://</code> 链接。</li>
+<li><code>origin</code> 是产生该链接条目的插件。</li>
+<li><code>exact</code> 表示路径是已知的工作区文件，不是从文本猜的。</li>
+<li><code>background</code> 链接不得切换窄屏视图。</li>
+<li><code>base</code> 是链接书写时所在的工作区相对目录。</li>
+<li>没有 <code>exists</code> 时，<code>ctx.links.exists</code> 回答 <code>false</code>，这样文本永远不会看起来像处理器打不开的链接。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise&lt;boolean&gt;
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}</code></pre>
+
+<h3>服务器（Servers）</h3>
+<p><code>Server</code> 贡献一组服务器连接，比如你的插件在其它机器上启动的服务器：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Server } from "@opencode/plugin/gui"
+
+ctx.add(
+  Server,
+  (): Server =&gt; ({
+    ready: loaded(),
+    entries: machines().map((machine) =&gt; ({
+      id: machine.id,
+      name: machine.name,
+      label: "Acme",
+      state: machine.url ? "ready" : "starting",
+      http: machine.url ? { url: machine.url } : undefined,
+    })),
+  }),
+)</code></pre>
+
+<ul>
+<li>启动会等待每个数据源就绪（<code>ready</code>）。就绪数据源的条目即其完整清单。</li>
+<li><code>order</code> 升序排序数据源。</li>
+<li>每个条目的键是 <code>&lt;plugin id&gt;:&lt;id&gt;</code>。<code>label</code> 是 <code>name</code> 旁的短徽标。</li>
+<li><code>auth</code> 表示服务器在等用户登录；<code>incompatible</code> 表示它运行的版本本应用不支持。</li>
+<li><code>listed: false</code> 把条目从应用的服务器列表里隐藏。Settings 仍然显示它。</li>
+<li><code>http</code> 是端点，服务器 <code>ready</code> 之后提供。</li>
+<li><code>reconnect</code> 重新解析掉线的端点；<code>connect</code> 准备一个未就绪的服务器；<code>remove</code> 在条目被移除前运行。</li>
+<li><code>row</code> 渲染服务器的设置行；<code>cover</code> 在服务器未就绪时盖住被路由的会话。</li>
+<li><code>row</code> 会收到宿主的状态 <code>Indicator</code>、最新一次 <code>health()</code> 检查，以及该行 <code>server.row</code> 菜单的 <code>Items</code>。它的 <code>remove()</code> 先运行条目的 <code>remove</code>，再关闭服务器的标签页。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise&lt;{ url: string; password?: string }&gt;
+  connect?(): Promise&lt;boolean&gt;
+  remove?(): Promise&lt;void&gt;
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise&lt;void&gt;
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}</code></pre>
+
+<h3>样式（Styles）</h3>
+<p><code>Style</code> 在贡献生效期间向文档注入一段 CSS 字符串：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)</code></pre>
+
+<h3>主题（Themes）</h3>
+<p><code>Theme</code> 向 Settings › Appearance › Theme 添加一个配色主题。它采用与应用自带主题文件相同的格式，所以主题文件可以原样导入：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)</code></pre>
+
+<p>主题文件为自己命名，并提供浅色和深色两个变体。每个变体从 <code>palette</code> 或 <code>seeds</code> 出发（二选一），并可用 <code>overrides</code> 钉住单个 token：</p>
+<div class="term-head"><span>midnight.json</span><span>JSON</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}</code></pre>
+
+<ul>
+<li>选择器会把插件主题与应用主题并列，按 <code>name</code> 字母序。</li>
+<li>宿主把每个主题的键定为 <code>&lt;plugin id&gt;:&lt;theme id&gt;</code>，所以它永远不会替换应用主题或其它插件的主题。</li>
+<li>撤回主题或禁用插件会把它从选择器里移除。选了它的用户保持该选择：主题回来之前，窗口显示默认主题。</li>
+<li>启动时，窗口显示上次运行缓存的配色，直到插件再次贡献该主题。</li>
+</ul>
+
+<h2>宿主 API（Host APIs）</h2>
+<p>宿主 API 都是 <code>ctx</code> 的属性。在应用界面挂载之前它们都不会抛错：读取返回文档中写明的默认值，而早期的写入（如 <code>ctx.layout.open</code>、<code>ctx.dialogs.open</code> 和 store 更新）会等待，并在第一个路由渲染后按调用顺序应用：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.add(Command, () =&gt; ({
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () =&gt; {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+}))</code></pre>
+
+<p>下面各节介绍每个 API。<code>ctx.options</code>、<code>ctx.client</code>、<code>ctx.app</code> 是<a href="#sec-10">共享上下文</a>；<code>ctx.provide</code>、<code>ctx.use</code>、<code>ctx.main</code> 配合<a href="#sec-14">契约与 Token</a> 工作；<code>ctx.stores</code> 持有插件<a href="#sec-8">声明</a>的 store；<code>ctx.icons</code> 持有它<a href="#sec-21">声明</a>的图标名。</p>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface SetupContext&lt;D&gt; extends Context {
+  stores: Record&lt;string, Persisted&lt;unknown&gt; | ((session: SessionRef) =&gt; Persisted&lt;unknown&gt;)&gt;
+  icons: Record&lt;string, PluginIconName&gt;
+}
+
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  add&lt;T&gt;(registry: Registry&lt;T&gt;, item: () =&gt; T | undefined): Cleanup
+  add&lt;T&gt;(registry: Registry&lt;T&gt;, item: T): Cleanup
+  list&lt;T&gt;(registry: Registry&lt;T&gt;): T[]
+  provide&lt;T&gt;(token: Contract&lt;T&gt;, impl: T): Cleanup
+  use&lt;T&gt;(token: Contract&lt;T&gt;): () =&gt; Live&lt;T&gt;
+  use&lt;S extends IpcSpec&gt;(token: Ipc&lt;S&gt;): () =&gt; Live&lt;IpcClient&lt;S&gt;&gt;
+  main&lt;S extends IpcSpec&gt;(token: Ipc&lt;S&gt;): IpcClient&lt;S&gt;
+  t(key: string, params?: Record&lt;string, string | number | boolean&gt;): string
+  plural(key: string, count: number, params?: Record&lt;string, string | number | boolean&gt;): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  toast: Toasts
+  attention: Attention
+  tabs: Tabs
+  keybinds: Keybinds
+  commands: Commands
+  links: Links
+  embeds: Embeds
+  ui: Ui
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}</code></pre>
+
+<h3>布局（Layout）</h3>
+<p><code>ctx.layout.open(key, session, options?)</code> 按键打开一个面板标签页，键为 <code>&lt;plugin id&gt;:&lt;tab id&gt;</code>。对未挂载的会话同样有效：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })</code></pre>
+
+<ul>
+<li><code>tab: "open"</code>（默认）在预览槽里选中该标签页；<code>"preview"</code> 把它变成新的预览；<code>"append"</code> 添加但不选中；<code>"select"</code> 添加并选中、保留预览。</li>
+<li><code>background: true</code> 在窄屏上保留当前视图并打开侧边区域，适合用户不是从面板发起的动作。</li>
+<li><code>close(key, session)</code> 移除标签页并调用其面板的 <code>close</code>。<code>toggle(key, session)</code> 关闭一个可见标签页，否则打开它。</li>
+<li><code>hide(key, session)</code> 隐藏展示某个可见标签页的窗格，但不关闭标签页：侧边区域，或用户拖到底部的那个底部窗格。再次打开该标签页会重新显示其窗格。</li>
+<li><code>state(key, session)</code> 在标签页不在标签条中时为 <code>"closed"</code>；在标签条中但窗格显示其它标签页时为 <code>"open"</code>；窗格显示它但窗格被隐藏（侧边区域关闭，或底部窗格隐藏）时为 <code>"active"</code>；上屏时为 <code>"visible"</code>。</li>
+<li><code>stored(session)</code> 是本插件存储在该会话侧边标签条里的标签页 id。</li>
+<li><code>ready()</code> 在存储的布局加载完成后为 <code>true</code>；<code>narrow()</code> 在视口小于 768px 时为 <code>true</code>。</li>
+<li><code>side.opened(session)</code> 在侧边区域打开时为 <code>true</code>；<code>side.toggle(session)</code> 打开或关闭它。</li>
+<li><code>side.menu()</code> 按 <code>order</code> 列出所有插件的 <code>session.panel</code> <a href="#sec-32">菜单条目</a>，供你做自己的启动器。</li>
+<li><code>side.width(panel)</code> 和 <code>side.resize(panel, width)</code> 读取和保存你某个面板的侧边区域宽度；见<a href="#panel-width">面板宽度</a>。</li>
+<li><code>sidebar.opened()</code> 是所有侧面板共享的内部侧栏偏好。</li>
+<li><code>scroll</code> 按会话和键存储滚动偏移。</li>
+<li><code>settings(page?)</code> 打开 Settings。<code>project(server, title)</code> 打开项目目录选择器和一个新草稿。</li>
+<li><code>draft({ server, directory, prompt })</code> 在自己的标签页里打开一个新草稿会话，提示词已填好，供用户检查后发送。</li>
+</ul>
+
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const session = ctx.sessions.current()
+const launchers = () =&gt; ctx.layout.side.menu().filter((item) =&gt; !item.primary &amp;&amp; !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}</code></pre>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+}
+
+type PanelState = "closed" | "open" | "active" | "visible"
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}</code></pre>
+
+<h3>会话与会话屏幕</h3>
+<p><code>ctx.sessions.current()</code> 是被路由的会话，<code>ctx.screen.current()</code> 是它的屏幕。在主页和草稿上两者都是 <code>undefined</code>。在动作处读取它们，永远不要在 <code>setup</code> 里只读一次：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session &amp;&amp; file) void file.sync("README.md")</code></pre>
+
+<ul>
+<li><code>key</code> 是 <code>&lt;server id&gt;\n&lt;session id&gt;</code>，跨服务器唯一。按它为会话级状态做键。</li>
+<li><code>tab</code> 是拥有该会话的 shell 标签页的键。服务器还在创建它时 <code>pending</code> 为 <code>true</code>。</li>
+<li><code>directory</code> 是会话的工作区目录；该目录就是项目根时 <code>local</code> 为 <code>true</code>。</li>
+<li><code>listedProject</code> 是会话所属的侧栏项目。</li>
+<li><code>visit</code> 是每次路由到该会话时的新对象。</li>
+<li><code>background</code> 列出会话正在运行的子智能体和 shell 命令。</li>
+<li><code>ctx.sessions.list()</code> 返回打开的 shell 标签页里的会话。</li>
+<li>屏幕的 <code>file</code> 读取工作区文件；<code>comment</code> 保存下一条提示词的行注释；<code>composer</code> 是下一条提示词：它的文本、附加部分和模型；见<a href="#sec-44">附加到输入框</a>。</li>
+<li><code>file.sync(path)</code> 加载一个文件并让服务器监视它的变化。文件标签页关闭时调用 <code>file.unwatch(path)</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise&lt;void&gt;
+  unwatch(path: string): void
+  exists(path: string): Promise&lt;boolean&gt;
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise&lt;string[]&gt;
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise&lt;void&gt;
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit&lt;Comment, "id" | "time"&gt;): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}</code></pre>
+
+<h3>附加到输入框（Attach to the composer）</h3>
+<p>在事件处理器或命令里用 <code>ctx.screen.current()?.composer</code>，把文件、附注（note）或引用（quote）附加到用户的下一条提示词：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const composer = ctx.screen.current()?.composer
+
+composer?.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: "globe",
+  subject: 'element &lt;button id="submit"&gt;Save&lt;/button&gt;',
+  comment: "Make this button primary and disable it while saving.",
+  href: "http://localhost:3000/settings",
+})</code></pre>
+
+<ul>
+<li><code>attach</code> 不改变键盘焦点。调用 <code>focus()</code> 把焦点移到提示词。</li>
+<li><code>update(commentID, { comment?, preview? })</code> 修改一个附加部分；附注或引用只接受新的 <code>comment</code>。</li>
+<li><code>detach(commentID)</code> 移除一个附加部分。</li>
+<li>附注的 <code>live</code> 会在该附注还留在本应用进程内时替换其 <code>subject</code> 和 <code>href</code>，适用于只有本进程能解析的引用，比如某个页面元素。存储的草稿会丢弃它；被回滚（revert）或分叉（fork）恢复的已发送消息也会丢弃它。</li>
+</ul>
+
+<p>引用是用户从你的插件展示的内容（比如日志输出）里引用的文字，可带一条注释。它像会话时间线里的引用一样渲染，在来源的图标和标签之下。先检查 <code>quotable()</code>：在子智能体的会话里（没有输入框）、以及输入框正在运行 shell 命令时，它是 <code>false</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}</code></pre>
+
+<ul>
+<li><code>source.subject</code> 是给模型看的来源名称，例如 <code>the terminal</code>。它不做本地化。</li>
+<li>省略 <code>comment</code> 可以让用户在芯片上自己添加。</li>
+<li><code>focus(commentID)</code> 打开附加引用的注释编辑器。输入框未展示时（比如窄屏上显示的是面板），编辑器会在输入框出现后打开。</li>
+<li>模型读到的是 <code>The user quoted the following from &lt;subject&gt;:</code>，然后是每行以 <code>&gt; </code> 为前缀的文本，然后是注释（如有）。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
+}</code></pre>
+
+<h3>读写提示词</h3>
+<p>用 <code>text()</code> 读用户输入的内容，用 <code>focused()</code> 判断是否正在输入：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const composer = ctx.screen.current()?.composer
+const empty = !composer?.text().trim()</code></pre>
+
+<ul>
+<li><code>text()</code> 是纯文本形式的提示词：一个 mention 读作它的 <code>@</code> 文本，附件和附加部分不包含在内。shell 模式下它是 shell 命令。会话草稿加载之前、以及没有输入框的子智能体会话里，它是 <code>""</code>。它是响应式的。</li>
+<li><code>focused()</code> 在键盘焦点位于提示词内时为 <code>true</code>。它不是响应式的，所以要在动作处读取，比如命令的 <code>run</code> 里。</li>
+</ul>
+
+<p><code>insert(text)</code> 把文本打进提示词，供用户检查后发送。输入框上的任何操作都不会替用户发送提示词：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const composer = ctx.screen.current()?.composer
+
+composer?.insert(`Explain ${path}`)
+composer?.focus()</code></pre>
+
+<ul>
+<li><code>insert</code> 把文本加在用户上次留在提示词里的光标处（否则加在末尾），并把光标移到其后。它不替换已选中的文本。</li>
+<li>文本不会被解析：<code>@path</code> 仍是文本，不是 mention。</li>
+<li><code>setText(text)</code> 替换提示词文本（包括 mention）。附件和附加部分保留。<code>setText("")</code> 清空文本。</li>
+<li>两者都不改变键盘焦点。调用 <code>focus()</code> 把焦点移到提示词。</li>
+<li>会话存储草稿加载之前的写入（<code>insert</code>、<code>setText</code>、<code>attach</code>、<code>update</code>、<code>detach</code>）会等待草稿，然后按调用顺序应用到调用时被路由的那个会话。它永远不会替换存储的草稿。</li>
+<li>在子智能体的会话（没有输入框）里，这些写入不做任何事。</li>
+</ul>
+
+<h3>选择模型</h3>
+<p><code>model()</code> 是下一条提示词将使用的模型；<code>setModel</code> 像模型选择器一样选择一个：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const composer = ctx.screen.current()?.composer
+
+if (composer &amp;&amp; !composer.setModel({ providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" })) {
+  ctx.toast.show({ variant: "error", title: ctx.t("model.unavailable") })
+}</code></pre>
+
+<ul>
+<li><code>model()</code> 是用户为被路由会话做的选择，否则是 agent 的默认值，否则是应用的默认值。模型目录加载中、没有已连提供商提供该模型时、以及子智能体会话里，它是 <code>undefined</code>。它是响应式的。</li>
+<li><code>setModel</code> 把该模型设为会话的选择及其最近使用列表的第一位。不带 <code>variant</code> 时，模型保留选择器会为它显示的变体。</li>
+<li><code>setVariant(variant)</code> 选择当前模型的一个变体。<code>undefined</code> 选择模型默认变体。</li>
+<li>目录加载中、没有已连提供商提供该模型、或模型没有该变体时，<code>setModel</code> 返回 <code>false</code> 且不做任何修改。</li>
+<li>没有当前模型或模型没有该变体时，<code>setVariant</code> 返回 <code>false</code> 且不做任何修改。</li>
+<li>在子智能体的会话里，两者都返回 <code>false</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Composer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  model(): ComposerModel | undefined
+  setModel(model: ComposerModel): boolean
+  setVariant(variant: string | undefined): boolean
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+  focused(): boolean
+}
+
+interface ComposerModel {
+  providerID: string
+  modelID: string
+  variant?: string
+}</code></pre>
+
+<h3>服务器与服务器事件</h3>
+<p><code>ctx.servers.get(id)</code> 返回一个活性的（live）<code>ServerRef</code>。运行你插件的桌面应用自带服务器的 id 是 <code>"sidecar"</code>。用 <code>data.on</code> 响应它的事件：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () =&gt; ctx.servers.get("sidecar")?.data,
+  (data) =&gt; onCleanup(data.on("session.created", (event) =&gt; console.log(event))),
+)</code></pre>
+
+<ul>
+<li><code>id</code> 是宿主键：<code>"sidecar"</code>、一个 http URL，或<a href="#sec-38">贡献的服务器</a>的 <code>&lt;plugin id&gt;:&lt;id&gt;</code>。</li>
+<li><code>data</code> 是该服务器同步的数据（如会话和项目）；<code>on(type, handler)</code> 监听其事件。它是响应式的。</li>
+<li>应用自带服务器 <code>builtin</code> 为 <code>true</code>。</li>
+<li>服务器版本与本应用兼容时 <code>compatible</code> 为 <code>true</code>；其事件连接在线期间 <code>connected</code> 为 <code>true</code>。</li>
+<li><code>password</code> 是用户配置的 HTTP basic 密码（如有）。</li>
+<li>每次都从活性的 <code>ServerRef</code> 里读 <code>client</code>、<code>data</code> 和 <code>url</code>：重启后的服务器在同一个 id 下会有新的客户端。</li>
+<li><code>ctx.servers.list()</code> 返回应用列出的服务器 id。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}</code></pre>
+
+<h3>对话框（Dialogs）</h3>
+<p><code>ctx.dialogs.open(render, { replace? })</code> 在已打开的对话框之上打开一个对话框，并返回一个句柄，其 <code>close()</code> 关闭它。拥有它的作用域结束时对话框也会关闭：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>const handle = ctx.dialogs.open((dialog) =&gt; &lt;ConfirmDialog onDone={dialog.close} /&gt;)</code></pre>
+
+<ul>
+<li><code>replace: true</code> 先关闭所有打开的对话框，包括宿主的和其它插件的。</li>
+<li><code>ctx.dialogs.active()</code> 在任何对话框打开时为 <code>true</code>。</li>
+<li>在 <code>ctx.ui.Dialog</code> 里渲染内容可获得应用的对话框框架；见<a href="#sec-50">应用组件</a>。</li>
+</ul>
+
+<h3>询问用户（Ask the user）</h3>
+<p><code>confirm</code>、<code>alert</code>、<code>prompt</code> 和 <code>select</code> 用应用自己的对话框提问，你的插件不需要自建对话框 UI。每个都返回一个 Promise，兑现为答案：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t("end"), danger: true })</code></pre>
+
+<ul>
+<li>只有用户确认时 <code>confirm</code> 才以 <code>true</code> 兑现。<code>danger</code> 把确认按钮渲染为破坏性样式，并把初始焦点放在取消按钮上。</li>
+<li>每个对话框像 <code>open</code> 一样打开，随提问者关闭，否则随你的插件关闭。</li>
+<li>取消、按 Escape、点击外部、被替换，或属主结束，会让 <code>confirm</code> 以 <code>false</code> 兑现，<code>prompt</code> 和 <code>select</code> 以 <code>undefined</code> 兑现。</li>
+</ul>
+
+<p><code>alert</code> 告知用户一件必须确认的事，只有一个按钮。无论怎么关闭，它都在对话框关闭时兑现：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })</code></pre>
+
+<p><code>prompt</code> 请求一行文本。初始 <code>value</code> 处于全选状态，所以直接输入会替换它。它永远不会以空字符串兑现：字段为空时提交无效。<code>secret: true</code> 隐藏用户输入的内容，适合密码或 token：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const token = await ctx.dialogs.prompt({ title: ctx.t("token.title"), placeholder: "ghp_…", secret: true })</code></pre>
+
+<p><code>select</code> 在一个可搜索列表里列出选项（像命令面板那样），兑现为选中项的 <code>value</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const url = await ctx.dialogs.select({
+  title: ctx.t("links.title"),
+  options: links.map((link) =&gt; ({ title: link.title, description: link.url, value: link.url, group: link.host })),
+})
+
+if (url) ctx.system.openExternal(url)</code></pre>
+
+<ul>
+<li>搜索匹配每个选项的 <code>title</code> 和 <code>description</code>。</li>
+<li>相同 <code>group</code> 的选项在该标题下列在一起。</li>
+<li><code>current</code> 是要最先高亮的选项值。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Dialogs {
+  open(render: (dialog: DialogHandle) =&gt; JSX.Element, options?: { replace?: boolean }): DialogHandle
+  confirm(options: ConfirmOptions): Promise&lt;boolean&gt;
+  alert(options: AlertOptions): Promise&lt;void&gt;
+  prompt(options: PromptOptions): Promise&lt;string | undefined&gt;
+  select&lt;T&gt;(options: SelectOptions&lt;T&gt;): Promise&lt;T | undefined&gt;
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+
+interface ConfirmOptions {
+  title: string
+  description?: string
+  confirm?: string
+  cancel?: string
+  danger?: boolean
+}
+
+interface AlertOptions {
+  title: string
+  description?: string
+  ok?: string
+}
+
+interface PromptOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  secret?: boolean
+  submit?: string
+}
+
+interface SelectOptions&lt;T&gt; {
+  title: string
+  placeholder?: string
+  options: { title: string; value: T; description?: string; group?: string }[]
+  current?: T
+}</code></pre>
+
+<h3>应用组件（App components）</h3>
+<p>插件 bundle 不能导入 <code>@opencode/ui</code>，所以 <code>ctx.ui</code> 把应用自带的组件给它用。它们以用户的主题、字体和语言渲染，你的插件 UI 看起来、表现起来就像应用的一部分：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { Show } from "solid-js"
+import { createLatest, Panel } from "@opencode/plugin/gui"
+
+const ui = ctx.ui
+const summary = createLatest(
+  () =&gt; ctx.sessions.current()?.directory,
+  (directory, signal) =&gt; fetchSummary(directory, signal),
+)
+
+ctx.add(Panel, {
+  id: "summary",
+  region: "side",
+  list: () =&gt; [summaryTab],
+  render: () =&gt; (
+    &lt;div&gt;
+      &lt;ui.Tooltip value={ctx.t("copy")}&gt;
+        &lt;ui.IconButton icon="copy" label={ctx.t("copy")} onClick={() =&gt; void ctx.system.copy(summary.latest ?? "")} /&gt;
+      &lt;/ui.Tooltip&gt;
+      &lt;Show when={summary.latest} fallback={&lt;ui.Loader size="large" /&gt;}&gt;
+        {(text) =&gt; &lt;ui.Markdown text={text()} /&gt;}
+      &lt;/Show&gt;
+    &lt;/div&gt;
+  ),
+})</code></pre>
+
+<ul>
+<li><code>Icon</code>、<code>Button</code>、<code>IconButton</code> 接受任意 <code>IconName</code>，与 SDK 的每个 <code>icon</code> 字段一样：应用图标之一，或 <code>ctx.icons</code> 里<a href="#sec-22">你自己的图标</a>。<code>IconButton</code> 的 <code>label</code> 是其无障碍名称；包一层 <code>Tooltip</code> 可以在悬停时显示。</li>
+<li>按钮的 <code>busy</code> 会把图标换成加载指示并禁用按钮，直到再次为 <code>false</code>。</li>
+<li>所有非「AI 工作中」的加载状态都用 <code>Loader</code>，比如面板、搜索或连接加载。</li>
+<li><code>Menu</code> 打开一个 <code>items</code> 列表：动作、<code>{ type: "separator" }</code> 和 <code>{ type: "group", label, items }</code>。</li>
+<li><code>Switch</code> 和 <code>TextInput</code> 不保存状态：把 <code>onChange</code> 或 <code>onInput</code> 收到的值传回 <code>checked</code> 或 <code>value</code>。</li>
+<li><code>Keybind</code> 把按键显示成芯片，比如 <code>ctx.keybinds.keybind(command)</code>。</li>
+<li><code>Markdown</code> 以时间线渲染消息的方式渲染；<code>Code</code> 展示一个高亮的只读代码块。两者在挂载后不久填入内容。</li>
+</ul>
+
+<p><code>Dialog</code> 是应用的对话框框架：一个标题、内容和按钮。从 <code>ctx.dialogs.open</code> 里渲染它；在别处它渲染不出有用的东西：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>const ui = ctx.ui
+
+ctx.dialogs.open((dialog) =&gt; (
+  &lt;ui.Dialog
+    title={ctx.t("rename.title")}
+    footer={
+      &lt;ui.Button variant="contrast" onClick={dialog.close}&gt;
+        {ctx.t("done")}
+      &lt;/ui.Button&gt;
+    }
+  &gt;
+    &lt;ui.TextInput label={ctx.t("rename.label")} value={name()} onInput={setName} onSubmit={dialog.close} autofocus /&gt;
+  &lt;/ui.Dialog&gt;
+))</code></pre>
+
+<ul>
+<li><code>size</code> 默认 <code>"fit"</code>：480px 宽、与内容同高。<code>"normal"</code>、<code>"large"</code>、<code>"x-large"</code> 是固定尺寸。</li>
+<li>Escape 和点击外部会关闭对话框。<code>closable: false</code> 隐藏头部的关闭按钮。</li>
+</ul>
+
+<h4 id="menu-rows">菜单行（Menu rows）</h4>
+<p><code>MenuItem</code>、<code>MenuSub</code>、<code>MenuGroup</code> 和 <code>MenuSeparator</code> 是给宿主渲染的菜单（比如 <code>session.location.menu</code> 插槽）用的行。它们支持键盘导航、显示宿主的弱化图标和快捷键芯片，并在选中时关闭菜单：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) =&gt; (
+    &lt;&gt;
+      &lt;ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() =&gt; openUsage(input.session)}
+      /&gt;
+      &lt;ui.MenuSub label={ctx.t("openIn")} icon="outline-share"&gt;
+        &lt;For each={apps()}&gt;{(app) =&gt; &lt;ui.MenuItem label={app.name} onSelect={() =&gt; launch(app, input.session)} /&gt;}&lt;/For&gt;
+      &lt;/ui.MenuSub&gt;
+    &lt;/&gt;
+  ),
+})</code></pre>
+
+<ul>
+<li><code>MenuItem</code> 接受与 <code>Menu</code> 的 <code>items</code> 条目相同的字段。</li>
+<li><code>MenuSub</code> 在行旁的子菜单里打开它的子节点。<code>onOpenChange</code> 告诉你何时打开，这样你可以只在打开期间加载它的行。</li>
+<li><code>MenuGroup</code> 把行放在一个标题下；<code>MenuSeparator</code> 在行之间画一条线。</li>
+<li><code>MenuItem</code>、<code>MenuSub</code>、<code>MenuGroup</code> 在菜单之外会抛错：宿主记录错误，该贡献不渲染任何内容。</li>
+</ul>
+
+<h4>选择器（Selects）</h4>
+<p><code>Select</code> 从一组选项中挑一个，就像应用设置行里选语言那样。它的值是字符串；<code>options</code> 的类型会收窄它：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>const [period, setPeriod] = createSignal&lt;"day" | "month"&gt;("day")
+
+&lt;ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/&gt;</code></pre>
+
+<ul>
+<li><code>label</code> 是选择器的无障碍名称；选中项的 <code>label</code> 是它显示的内容。</li>
+<li>没有任何选项拥有的 <code>value</code> 会显示 <code>placeholder</code>。再次选中当前选项不会调用 <code>onChange</code>。</li>
+</ul>
+
+<h4 id="settings-components">设置组件（Settings components）</h4>
+<p><code>SettingsLayout</code>、<code>SettingsSection</code> 和 <code>SettingsRow</code> 按应用渲染自己设置页的方式渲染一个<a href="#sec-30">设置页面</a>：页面头部、带标题和边框列表的分区、以及带标题、说明和末端控件的行：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>&lt;ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={&lt;HelpButton /&gt;}&gt;
+  &lt;ui.SettingsSection title={ctx.t("section.display")} footer={&lt;Show when={error()}&gt;{ctx.t("error")}&lt;/Show&gt;}&gt;
+    &lt;ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}&gt;
+      &lt;ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} /&gt;
+    &lt;/ui.SettingsRow&gt;
+  &lt;/ui.SettingsSection&gt;
+&lt;/ui.SettingsLayout&gt;</code></pre>
+
+<ul>
+<li>自己的整页用 <code>SettingsLayout</code>；宿主页上的分区用 <code>SettingsSection</code>；宿主分区里的行单独用 <code>SettingsRow</code>。任何情况下行都与宿主的行对齐。</li>
+<li>行上的 <code>id</code> 就是能「揭示」它的 <code>SettingEntry.id</code>。命中页面自身 id 的搜索会高亮头部。</li>
+<li><code>actions</code> 放在标题行末端。分区的 <code>footer</code> 放在列表下方、边框之外。</li>
+<li>它们的外观取自 Settings 界面的样式，所以要从 <code>SettingsPage</code> 里渲染它们。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Ui {
+  Icon(props: UiIconProps): JSX.Element
+  Button(props: UiButtonProps): JSX.Element
+  IconButton(props: UiIconButtonProps): JSX.Element
+  Tooltip(props: UiTooltipProps): JSX.Element
+  Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  Loader(props: UiLoaderProps): JSX.Element
+  Dialog(props: UiDialogProps): JSX.Element
+  Switch(props: UiSwitchProps): JSX.Element
+  TextInput(props: UiTextInputProps): JSX.Element
+  Select&lt;T extends string&gt;(props: UiSelectProps&lt;T&gt;): JSX.Element
+  Keybind(props: UiKeybindProps): JSX.Element
+  Markdown(props: UiMarkdownProps): JSX.Element
+  Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
+}
+
+interface UiIconProps {
+  name: IconName
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiButtonProps {
+  children: JSX.Element
+  onClick?: (event: MouseEvent) =&gt; void
+  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  size?: "small" | "normal" | "large"
+  icon?: IconName
+  disabled?: boolean
+  busy?: boolean
+  type?: "button" | "submit"
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiIconButtonProps {
+  icon: IconName
+  label: string
+  onClick?: (event: MouseEvent) =&gt; void
+  variant?: "neutral" | "ghost" | "ghost-muted"
+  size?: "small" | "normal" | "large"
+  disabled?: boolean
+  pressed?: boolean
+  busy?: boolean
+  class?: string
+}
+
+interface UiTooltipProps {
+  value: JSX.Element
+  keys?: string[]
+  placement?: "top" | "bottom" | "left" | "right"
+  children: JSX.Element
+}
+
+interface UiMenuProps {
+  label: string
+  items: UiMenuEntry[]
+  trigger?: "icon" | "button"
+  icon?: IconName
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  disabled?: boolean
+}
+
+type UiMenuEntry = UiMenuItem | UiMenuSeparator | UiMenuGroup
+
+interface UiMenuItem {
+  type?: "item"
+  label: string
+  icon?: IconName
+  keys?: string[]
+  disabled?: boolean
+  onSelect(): void
+}
+
+interface UiMenuSeparator {
+  type: "separator"
+}
+
+interface UiMenuGroup {
+  type: "group"
+  label: string
+  items: UiMenuItem[]
+}
+
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) =&gt; void
+  children: JSX.Element
+}
+
+interface UiLoaderProps {
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiDialogProps {
+  title: string
+  description?: string
+  children?: JSX.Element
+  footer?: JSX.Element
+  size?: "fit" | "normal" | "large" | "x-large"
+  closable?: boolean
+}
+
+interface UiSwitchProps {
+  checked: boolean
+  onChange: (checked: boolean) =&gt; void
+  label: string
+  hideLabel?: boolean
+  description?: string
+  disabled?: boolean
+}
+
+interface UiTextInputProps {
+  value: string
+  onInput: (value: string) =&gt; void
+  label: string
+  placeholder?: string
+  onSubmit?: (value: string) =&gt; void
+  type?: "text" | "password" | "search" | "url"
+  size?: "normal" | "large"
+  disabled?: boolean
+  invalid?: boolean
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiKeybindProps {
+  keys: string[]
+  class?: string
+}
+
+interface UiMarkdownProps {
+  text: string
+  class?: string
+}
+
+interface UiCodeProps {
+  content: string
+  language?: string
+  class?: string
+}
+
+interface UiSelectProps&lt;T extends string&gt; {
+  options: UiSelectOption&lt;T&gt;[]
+  value: T | undefined
+  onChange: (value: T) =&gt; void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption&lt;T extends string&gt; {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
+}</code></pre>
+
+<h3>Toast</h3>
+<p><code>ctx.toast.show</code> 在窗口角落显示一条短消息，并返回一个句柄，其 <code>dismiss()</code> 关闭它：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })</code></pre>
+
+<ul>
+<li><code>variant</code> 是 <code>"default"</code>、<code>"success"</code>、<code>"error"</code> 或 <code>"loading"</code>。<code>success</code> toast 默认显示对勾图标，除非你设置了 <code>icon</code>。</li>
+<li><code>duration</code> 是 toast 展示的时长，单位毫秒。默认 5 秒。</li>
+<li><code>persistent: true</code> 让 toast 一直留到用户或 <code>dismiss()</code> 关闭它，并忽略 <code>duration</code>。</li>
+<li>与一个仍在显示的 toast 相同的新 toast 会替换它，而不是叠一份。</li>
+<li>你的插件的 toast 会在它停止时关闭，所以没有按钮会活得比运行它的代码更久。toast 不会随展示它的组件或 <code>createKeyed</code> 运行而关闭。</li>
+</ul>
+
+<p>工作运行期间显示一个 <code>loading</code> toast，结束时关掉它：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
+await save()
+saving.dismiss()</code></pre>
+
+<p><code>actions</code> 添加按钮。点击会运行该动作并关闭 toast：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>ctx.toast.show({
+  variant: "error",
+  title: ctx.t("sync.failed"),
+  actions: [{ label: ctx.t("retry"), run: () =&gt; void sync() }],
+})</code></pre>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Toasts {
+  show(options: ToastOptions): ToastHandle
+}
+
+interface ToastHandle {
+  dismiss(): void
+}
+
+interface ToastOptions {
+  title: string
+  description?: string
+  variant?: "default" | "success" | "error" | "loading"
+  icon?: IconName
+  duration?: number
+  persistent?: boolean
+  actions?: ToastAction[]
+}
+
+interface ToastAction {
+  label: string
+  run(): void
+}</code></pre>
+
+<h3>通知（Notifications）</h3>
+<p><code>ctx.attention.notify</code> 在用户看向别处时唤起注意：一条系统通知和一个提示音，规则与应用自己的通知相同：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const session = ctx.sessions.current()
+
+if (session) {
+  void ctx.attention.notify({
+    title: ctx.t("tests.done"),
+    message: ctx.t("tests.summary", { failed: 0 }),
+    session: { server: session.server.id, id: session.id },
+    id: run.id,
+  })
+}</code></pre>
+
+<ul>
+<li>系统通知只在没有任何应用窗口有焦点时显示。提示音则无论如何都播放。</li>
+<li>两者都遵循 <strong>Settings &gt; Notifications</strong>。<code>variant: "default"</code> 走 <strong>Agent</strong> 行，<code>variant: "error"</code> 走 <strong>Errors</strong> 行。两者的桌面通知默认关闭；提示音默认开启。</li>
+<li><code>sound: false</code> 永远不播放提示音。</li>
+<li>点击通知会把应用带到前台，并在你提供了 <code>session</code> 时打开它。</li>
+<li>每个应用窗口都运行插件自己的一份副本。传一个事件 id（比如某次运行的 id），这样只有第一个发送它的窗口会通知并播放声音。不给 <code>id</code>，每次调用都会通知。</li>
+<li>应用界面挂载之前，<code>notify</code> 会等待它。</li>
+</ul>
+
+<p><code>notify</code> 永远不会 reject。它兑现自己做了什么：<code>notification</code> 在应用请求系统显示通知时为 <code>true</code>；<code>sound</code> 在提示音开始播放时为 <code>true</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const result = await ctx.attention.notify({ title: ctx.t("deploy.failed"), variant: "error" })
+
+if (!result.notification) ctx.toast.show({ variant: "error", title: ctx.t("deploy.failed") })</code></pre>
+
+<ul>
+<li><code>notification</code> 为 <code>false</code> 的情况：用户关掉了它、某个应用窗口有焦点、或另一个窗口已经发送过同一个 <code>id</code>。即使应用请求系统显示通知，系统仍可能隐藏它，比如用户拒绝了浏览器的通知权限。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Attention {
+  notify(options: NotifyOptions): Promise&lt;NotifyResult&gt;
+}
+
+interface NotifyOptions {
+  title: string
+  message?: string
+  variant?: "default" | "error"
+  session?: { server: string; id: string }
+  sound?: boolean
+  id?: string
+}
+
+interface NotifyResult {
+  notification: boolean
+  sound: boolean
+}</code></pre>
+
+<h3>用量数据（Usage data）</h3>
+<p>会话的 token、成本和套餐数据在它的服务器数据里——就是应用读取头部「28k · $0.28」的那个响应式 store。从那里读取，而不是从 opencode 的数据库：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () =&gt; data.session.get(session.id)
+
+const tokens = () =&gt; info()?.tokens // 本会话按类别统计的 token
+const cost = () =&gt; data.session.cost(session.id) // 美元，含子智能体会话
+const step = () =&gt; lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () =&gt; (session.location ? data.location.usage.limits(session.location) : undefined)</code></pre>
+
+<ul>
+<li><code>step()</code> 是当前填充上下文窗口的那个助手步骤，与应用的上下文环一致。把它的 <code>tokens</code> 与 <code>data.location.model.list</code> 里模型的 <code>limit.context</code> 比较。</li>
+<li><code>limits()</code> 在 <code>data.location.usage.sync(location)</code> 加载后持有 OpenCode Console 预算和 Go 套餐额度。服务器没有上报时为 <code>null</code>。</li>
+</ul>
+
+<h3>标签页（Tabs）</h3>
+<p><code>ctx.tabs</code> 读取和修改 shell 的标签条：以标签页形式打开的会话和草稿。下面代码在某个会话的运行结束时把它的标签页移到最前：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () =&gt; ctx.servers.get("sidecar")?.data,
+  (data) =&gt;
+    onCleanup(
+      data.on("session.execution.succeeded", (event) =&gt; {
+        const tab = ctx.tabs.list().find((item) =&gt; item.session?.id === event.data.sessionID)
+
+        if (tab) ctx.tabs.move(tab.key, 0)
+      }),
+    ),
+)</code></pre>
+
+<ul>
+<li><code>list()</code> 按标签条顺序返回打开的标签页。它是响应式的。草稿的标签页 <code>session</code> 为 <code>undefined</code>；屏上标签页 <code>active</code> 为 <code>true</code>。</li>
+<li><code>open({ server, id }, { focus? })</code> 把会话作为标签页打开在标签条末尾，除非 <code>focus</code> 为 <code>true</code>，否则在后台打开。已打开的会话保留其标签页；父标签页正在展示的子智能体也一样。</li>
+<li><code>focus(key)</code> 展示一个标签页；<code>move(key, index)</code> 移动它；<code>close(key)</code> 像用户那样关闭它。</li>
+<li>没有打开标签页持有的键不做任何事。应用界面挂载前的写入会等待它。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Tabs {
+  list(): ShellTab[]
+  open(session: { server: string; id: string }, options?: { focus?: boolean }): void
+  focus(key: string): void
+  move(key: string, index: number): void
+  close(key: string): void
+}
+
+interface ShellTab {
+  key: string
+  session: SessionRef | undefined
+  active: boolean
+}</code></pre>
+
+<h3>键位（Keybinds）</h3>
+<p><code>ctx.keybinds</code> 读取用户为某个已发布命令 id 设置的快捷键：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) =&gt; ctx.keybinds.matches(`${ctx.id}.open`, event)</code></pre>
+
+<ul>
+<li><code>keybind(command)</code> 返回命令生效键位的展示部分，例如 <code>["Ctrl", "K"]</code>。命令未绑定键位时为空。</li>
+<li><code>keys(bind)</code> 返回应用不拥有的一个组合键的展示部分，比如页面自己处理的那个。</li>
+<li><code>matches(command, event)</code> 在事件匹配命令的生效键位时为 <code>true</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}</code></pre>
+
+<h3>运行命令（Run commands）</h3>
+<p><code>ctx.commands.run(id)</code> 运行一个命令，效果与在命令面板里选中它相同。命令无法运行时返回 <code>false</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>if (!ctx.commands.run("terminal.toggle")) ctx.toast.show({ title: ctx.t("terminal.unavailable") })</code></pre>
+
+<ul>
+<li><code>id</code> 是任意插件的一个已发布插件命令 <code>&lt;plugin id&gt;.&lt;command id&gt;</code>，或应用自带命令之一，比如 <code>command.palette</code>。</li>
+<li>应用的命令 id 不是稳定 API，版本之间可能变化。</li>
+<li>没有启用的命令持有该 id 时 <code>run</code> 返回 <code>false</code>。已列出但被禁用的命令不会运行。</li>
+<li>应用界面挂载之前没有任何命令注册，所以 <code>run</code> 返回 <code>false</code>。</li>
+<li><code>run</code> 不等待命令的异步工作。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Commands {
+  run(id: string): boolean
+}</code></pre>
+
+<h3>系统与环境</h3>
+<p><code>ctx.system</code> 在所有平台都可用。<code>ctx.desktop</code> 增加仅桌面端的能力，在 Web 上是 <code>undefined</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const show = async (path: string) =&gt; {
+  if (ctx.desktop &amp;&amp; (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}</code></pre>
+
+<ul>
+<li><code>system.save</code> 在桌面端显示保存对话框，在 Web 上下载。用户取消对话框时返回 <code>false</code>。</li>
+<li><code>system.openExternal</code> 在系统浏览器打开 URL。应用内的链接用 <code>ctx.links.open</code>，它把一个 <code>Link</code> 路由到它的<a href="#sec-37">链接处理器</a>。</li>
+<li><code>desktop.launch(path, app?)</code> 用某个应用（或默认应用）打开路径；<code>desktop.reveal(path)</code> 在文件管理器里显示它。</li>
+<li><code>ctx.embeds</code> 在窗口里渲染一个主进程 web 视图；见<a href="#sec-76">嵌入式 Web 视图</a>。</li>
+<li><code>ctx.locale</code> 读取界面语言及其书写方向。<code>ctx.appearance.font("mono")</code> 是用户终端字体的 CSS font family。</li>
+<li><code>ctx.router</code> 读取当前路由路径、以及是否有路由切换正在进行。</li>
+<li><code>ctx.workspaces.on("remove", handler)</code> 在用户从服务器移除一个工作区目录时运行，方便你清理以它为作用域的 store。</li>
+</ul>
+
+<p><code>desktop.pick(options)</code> 用系统打开对话框请用户选择文件或文件夹，并兑现为绝对路径：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const [folder] = (await ctx.desktop?.pick({ directory: true, title: ctx.t("pick.folder") })) ?? []
+
+if (folder) await ctx.client.rpc(Acme).index({ directory: folder })</code></pre>
+
+<ul>
+<li><code>directory: true</code> 选择文件夹而不是文件；<code>multiple: true</code> 允许多选。</li>
+<li><code>extensions</code> 限制可提供的文件（不带点），比如 <code>["json"]</code>。文件夹不受它限制。</li>
+<li><code>title</code> 是对话框标题。不是所有系统都显示它。</li>
+<li>用户取消时路径为空。对话框打不开时 <code>pick</code> 会 reject。</li>
+<li><code>pick</code> 仅限桌面端：浏览器永远不会告诉页面被选文件在哪里。</li>
+</ul>
+
+<p><code>ctx.appearance.mode()</code> 是界面显示的配色方案，<code>"light"</code> 或 <code>"dark"</code>。它是响应式的：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const background = () =&gt; (ctx.appearance.mode() === "dark" ? "#000" : "#fff")</code></pre>
+
+<ul>
+<li>它遵循用户在 <strong>Settings &gt; Appearance</strong> 里的选择，<strong>System</strong> 解析为系统当前方案。</li>
+<li>应用界面挂载之前，它是系统方案。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface System {
+  copy(text: string): Promise&lt;void&gt;
+  save(file: { name: string; content: string }): Promise&lt;boolean&gt;
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  zoom(): number
+  launch(path: string, app?: string): Promise&lt;void&gt;
+  reveal(path: string): Promise&lt;boolean&gt;
+  installed(app: string): Promise&lt;boolean&gt;
+  pick(options?: PickOptions): Promise&lt;string[]&gt;
+}
+
+interface PickOptions {
+  directory?: boolean
+  multiple?: boolean
+  title?: string
+  extensions?: string[]
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise&lt;boolean&gt;
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+  mode(): "light" | "dark"
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) =&gt; void): Cleanup
+}</code></pre>
+
+<h2>存储状态（Stored state）</h2>
+<p>桌面窗口通过 IPC 加载存储状态，而 Web 端立即读取 <code>localStorage</code>。在 <code>Plugin.define({ stores })</code> 里声明 store，宿主会替你加载：</p>
+
+<ul>
+<li><strong><code>Store.global</code></strong>——整个应用保存一份值。它在 <code>setup</code> 运行前加载，所以 <code>ctx.stores.name.value</code> 永远不是 <code>undefined</code>。</li>
+<li><strong><code>Store.session</code></strong>——每个会话保存一份值。它在会话挂载时加载；在那之前 <code>ctx.stores.name(session).value</code> 是 <code>undefined</code>。</li>
+</ul>
+
+<p>声明的 store 是给窗口用的。<code>main</code> 用 <code>ctx.storage.store</code> 打开自己的状态，它是同步读取的；见<a href="#sec-70">主进程上下文</a>。</p>
+
+<p>用 <code>update(draft =&gt; …)</code> 原地修改值（必须不返回任何东西），或用 <code>set(next)</code> 整体替换：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const enabled = ctx.stores.prefs.value.enabled
+
+ctx.stores.prefs.update((draft) =&gt; {
+  draft.enabled = !draft.enabled
+})</code></pre>
+
+<ul>
+<li><code>ready()</code> 在值加载完成后为 <code>true</code>。在那之前做的写入会等待并按调用顺序应用。</li>
+<li><code>from</code> 指定其它存储键，在 store 还没有值时一次性导入，比如你重命名前的 store 的键：<code>"plugin.acme.settings"</code>。传一个列表可以按新到旧依次尝试。另一个键保留其副本，直到该 store 被删除。</li>
+</ul>
+
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>stores: {
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
+}</code></pre>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>const Store: {
+  global(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+}
+
+interface Persisted&lt;T, V = T | undefined&gt; {
+  value: V
+  ready(): boolean
+  update(mutate: (draft: T) =&gt; undefined): void
+  set(next: T): void
+}</code></pre>
+
+<h3>运行时存储（Runtime stores）</h3>
+<p><code>ctx.storage.store(key, options)</code> 为一个只在运行时才知道的键打开 store。<code>scope</code> 可以按服务器、目录或会话各保存一份值：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin&lt;typeof definition&gt;()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return &lt;p&gt;{draft.value?.text}&lt;/p&gt;
+}</code></pre>
+
+<ul>
+<li><code>scope: "global"</code>（默认）整个应用保存一份值。</li>
+<li><code>scope: { server, directory? }</code> 每个服务器（或其上的每个工作区目录）保存一份值。</li>
+<li><code>scope: { session }</code> 每个会话保存一份值；会话移动到新目录时会重新打开。</li>
+<li>运行时 store 的 <code>value</code> 在加载之前是 <code>undefined</code>。</li>
+<li><code>ctx.storage.memory(key, { initial })</code> 保存窗口本地的状态，插件重载后仍在，但窗口重载后消失。</li>
+<li><code>ctx.storage.remove(key, { scope, from })</code> 删除值，键随后再次读取为 <code>initial</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Storage {
+  store(key: string, options: StoreOptions): Persisted&lt;T&gt;
+  memory(key: string, options: { initial: T }): [Store&lt;T&gt;, (mutation: (draft: T) =&gt; void) =&gt; void]
+  remove(key: string, options?: { scope?: StorageScope; from?: string | string[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: string | string[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }</code></pre>
+
+<h2>响应式原语（Reactive primitives）</h2>
+<p>优先使用这些辅助函数，而不是原始的 <code>createEffect</code>、<code>createRenderEffect</code> 和 <code>createComputed</code>。它们遵循插件的生命周期及其依赖的重启——手写 effect 往往在这上面出错。</p>
+
+<h3>createKeyed</h3>
+<p><code>createKeyed(source, fn, { otherwise?, equals? })</code> 为每个键在全新的属主里运行 <code>fn</code>：<code>ctx.use</code> 访问器的每个活跃代际（generation），或普通访问器的每个值。<code>fn</code> 内注册的一切都随该次运行结束：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { onCleanup } from "solid-js"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Changes 的每个活跃代际都让该视图的变更保持加载；监视随它一起结束。
+  createKeyed(ctx.use(Changes), (changes) =&gt; onCleanup(changes.watch(props.screen, "files")))
+
+  return &lt;FileMarkers screen={props.screen} /&gt;
+}</code></pre>
+
+<ul>
+<li><code>otherwise</code> 在源没有键时运行：<code>Live</code> 访问器未激活，或普通访问器的值为 <code>undefined</code>、<code>null</code>、<code>false</code>。</li>
+<li><code>equals</code> 决定普通访问器的新值是否算同一个键，从而 <code>fn</code> 不再运行。源每次都构建新对象时用它。<code>Live</code> 访问器永远按代际分键。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>function createKeyed&lt;T&gt;(
+  source: () =&gt; Live&lt;T&gt; | T,
+  fn: (value: T) =&gt; void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void</code></pre>
+
+<h3>createLatest</h3>
+<p><code>createLatest(source, (value, signal) =&gt; promise)</code> 在 <code>source</code> 变化时取数，中止过期请求，且永不挂起：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const summary = createLatest(
+  () =&gt; ctx.sessions.current()?.directory,
+  (directory, signal) =&gt; fetchSummary(directory, signal),
+)
+const text = () =&gt; summary.latest ?? ""</code></pre>
+
+<ul>
+<li><code>latest</code> 是最近一次结果，在更新的请求运行期间保留。首次之前是 <code>undefined</code>。</li>
+<li><code>loading</code> 在针对当前值的请求在途时为 <code>true</code>。</li>
+<li><code>error</code> 是当前请求的拒绝原因（如有）。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>function createLatest&lt;S, T&gt;(
+  source: () =&gt; Live&lt;S&gt; | S,
+  fetch: (value: S, signal: AbortSignal) =&gt; Promise&lt;T&gt;,
+): { latest: T | undefined; loading: boolean; error: unknown }</code></pre>
+
+<h3>createVisitState</h3>
+<p><code>createVisitState(initial)</code> 创建一个 <code>[value, setValue]</code> 信号，每当用户离开会话再回来时重置：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const [expanded, setExpanded] = createVisitState(false)</code></pre>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>function createVisitState&lt;T&gt;(initial: T): [value: () =&gt; T, set: (next: T) =&gt; void]</code></pre>
+
+<h3>usePanel 和 useDrawer</h3>
+<p><code>usePanel()</code> 读取包裹它的面板框架，在面板 render 之外会抛错。<code>useDrawer()</code> 返回贡献外围的移动端抽屉，在抽屉之外返回 <code>undefined</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const panel = usePanel()
+const drawer = useDrawer()
+const compact = () =&gt; panel.placement() === "mobile"
+const close = () =&gt; drawer?.close()</code></pre>
+
+<ul>
+<li><code>placement()</code> 在侧边区域里是 <code>"side"</code>，在窄屏视图里是 <code>"mobile"</code>。</li>
+<li><code>visible()</code> 在区域打开且本标签页被选中时为 <code>true</code>。<code>present()</code> 在区域动画关闭期间保持 <code>true</code>。</li>
+<li><code>reserve()</code> 要求你在头部末端给宿主的区域切换按钮留出空间。</li>
+<li><code>sidebar</code> 是所有侧面板共享的内部侧栏偏好。带侧栏的面板要自己渲染切换按钮。</li>
+<li><code>drawer.open(view)</code> 用内容替换抽屉的视图，并带一个返回控件。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>function usePanel(): PanelFrame
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
+}</code></pre>
+
+<h2>应用契约（App contracts）</h2>
+<p>应用向每个插件提供这些契约。用 <code>ctx.use(token)</code> 跟随其中一个，并在它不处于 <code>active</code> 时妥善处理——就像对待任何其它插件的契约一样。例如 <code>Browser</code> 在 Web 上是 <code>inactive</code>。</p>
+
+<h3>Files（文件）</h3>
+<p><code>@opencode/plugin/gui/file</code> 导出应用的文件树和 <strong>Open in</strong> 按钮，以及 <code>FileViewer</code> 注册表：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+
+// 文件视图自己不渲染的某类文件的查看器。
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props: FileViewerProps) =&gt; &lt;AcmeDoc bytes={props.bytes} onError={props.onError} /&gt;),
+})</code></pre>
+
+<ul>
+<li><strong><code>FileTree</code></strong>是一个契约。<code>Tree</code> 和 <code>List</code> 渲染工作区文件的虚拟化树或列表，带变更标记。用 <code>ctx.use(FileTree)</code> 读取。树的 <code>labels</code> 在文件夹名后附加文字，比如它有多少条目。</li>
+<li><strong><code>OpenInApp</code></strong>是一个契约。<code>Button</code> 是会话工作区的桌面 <strong>Open in</strong> 按钮。</li>
+<li><strong><code>FileViewer</code></strong>是一个注册表。查看器列出它渲染的 <code>kinds</code>，可以用 <code>problem</code> 拒绝字节，并渲染一个上报 <code>onDetails</code> 和 <code>onError</code> 的 <code>View</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map&lt;string, ChangeKind&gt;
+  labels?: Map&lt;string, string&gt;
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map&lt;string, ChangeKind&gt;
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component&lt;FileViewerProps&gt;
+}
+
+interface FileViewerProps {
+  bytes: Uint8Array
+  onDetails(details: string[]): void
+  onError(reason?: string): void
+}</code></pre>
+
+<h3>审查变更（Review changes）</h3>
+<p><code>@opencode/plugin/gui/review</code> 导出 <code>Changes</code>（应用对会话变更的视图）和 <code>ChangeKind</code>（<code>"add"</code>、<code>"del"</code> 或 <code>"mix"</code>）：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Changes } from "@opencode/plugin/gui/review"
+
+const changes = ctx.use(Changes)
+
+const count = () =&gt; {
+  const live = changes()
+  const session = ctx.sessions.current()
+
+  return live.status === "active" &amp;&amp; session ? live.value.diffs(session).length : 0
+}</code></pre>
+
+<ul>
+<li><code>diffs(session)</code> 是当前审查模式的 diff；<code>ready(session)</code> 在它们加载完成后为 <code>true</code>。两者都是响应式的。只有被路由的会话有变更；其它会话读取为空。</li>
+<li><code>kinds(session)</code> 把每个变更的文件和目录映射到它的 <code>ChangeKind</code>。</li>
+<li><code>active(session)</code> 是审查面板正在展示的文件。</li>
+<li><code>details(session)</code> 是会话目录的未提交变更，与审查模式无关。</li>
+<li><code>focus(session, path)</code> 在审查面板展示一个文件；<code>open(session)</code> 展示全部变更。</li>
+<li><code>watch(screen, source)</code> 在某个视图展示变更期间保持变更加载，跨越该视图的会话切换。从面板或插槽输入传入所属 screen。它返回一个停止监视的函数；见<a href="#sec-61">createKeyed</a>。</li>
+<li><code>tree</code> 监视是一个持久化的变更列表：打开侧边区域会刷新它。<code>details</code> 监视加载 <code>details(session)</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map&lt;string, ChangeKind&gt;
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () =&gt; void
+}
+
+type ChangeKind = "add" | "del" | "mix"</code></pre>
+
+<h3>Browser（浏览器）</h3>
+<p><code>@opencode/plugin/gui/browser</code> 导出 <code>Browser</code>，会话的桌面浏览器窗格：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Browser } from "@opencode/plugin/gui/browser"
+
+const session = ctx.sessions.current()
+const live = ctx.use(Browser)()
+const url = "http://localhost:3000"
+
+if (session &amp;&amp; live.status === "active" &amp;&amp; live.value.canOpen(session, url)) live.value.open(session, url)</code></pre>
+
+<ul>
+<li><code>attached(session)</code> 在会话带有浏览器窗格时为 <code>true</code>。</li>
+<li><code>canOpen(session, path?)</code> 在工作区文件或 http(s) URL 可以在窗格中打开时为 <code>true</code>。</li>
+<li><code>open(session, url)</code> 在会话的侧面板里把一个 URL 作为浏览器标签页打开。</li>
+<li><code>openFile(session, path)</code> 把工作区文件作为 <code>file://</code> 标签页打开。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}</code></pre>
+
+<h2>主进程（The main process）</h2>
+<p>在 OpenCode Desktop 上，插件的 <code>main</code> setup 在 Electron 主进程里运行一次，是全应用的单例。它可以完整访问 Node.js 内置模块、<code>electron</code> 和主进程宿主 API。把它传给插件 <code>./gui-experimental</code> 文件里的 <code>Plugin.define</code>，与窗口 <code>setup</code> 并列或单独使用：</p>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Schema } from "effect"
+import { powerSaveBlocker } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+import { KeepAwake } from "./gui/contract"
+
+export default Plugin.define({
+  main(ctx) {
+    const stored = ctx.storage.store("keepScreenActive", { schema: Schema.Boolean, initial: false })
+    let blockerId: number | undefined
+
+    const release = () =&gt; {
+      if (blockerId === undefined) return
+      powerSaveBlocker.stop(blockerId)
+      blockerId = undefined
+    }
+
+    const setActive = (enabled: boolean) =&gt; {
+      if (enabled &amp;&amp; blockerId === undefined) blockerId = powerSaveBlocker.start("prevent-display-sleep")
+      if (!enabled) release()
+      stored.set(enabled)
+    }
+
+    if (stored.value) setActive(true)
+
+    ctx.provide(KeepAwake, {
+      screenActive: () =&gt; blockerId !== undefined &amp;&amp; powerSaveBlocker.isStarted(blockerId),
+      setScreenActive: (enabled) =&gt; setActive(enabled),
+    })
+
+    return release
+  },
+})</code></pre>
+
+<p>在窗口里，<code>electron</code> 是惰性占位符，所以在共享的 <code>./gui-experimental</code> 文件里导入它是安全的。见<a href="#sec-2">一个文件，两个进程</a>。</p>
+
+<h2>主进程上下文（Main context）</h2>
+<p><code>main</code> 收到一个 <code>MainContext</code>。与窗口 <code>setup</code> 不同，<code>main</code> 可以是 <code>async</code>，并且可以返回（或兑现为）一个清理函数：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>main(ctx) {
+  ctx.log.write("info", "acme started", { version: ctx.app.version })
+}</code></pre>
+
+<ul>
+<li><code>ctx.options</code>、<code>ctx.client</code>、<code>ctx.app</code> 是<a href="#sec-10">共享上下文</a>。在 <code>main</code> 里，<code>ctx.app.platform</code> 永远是 <code>"desktop"</code>。</li>
+<li><code>ctx.storage.store(key, { schema, initial })</code> 在插件的命名空间里同步打开一个 store。它的 <code>value</code> 永远有定义；每次 <code>set</code> 或 <code>update</code> 都在返回前写入数据库。<code>ctx.storage.remove(key)</code> 删除值。</li>
+<li><code>ctx.signal</code> 在插件被禁用、重载、移除，或应用退出时中止。<code>ctx.onCleanup(fn)</code> 在那时运行 <code>fn</code>；见<a href="#sec-78">生命周期与清理</a>。</li>
+<li><code>ctx.provide</code> 在插件 id 下实现一个 <code>Ipc</code>；见<a href="#sec-71">定义并提供 Ipc</a>。</li>
+<li><code>ctx.add</code> 向主进程注册表做贡献，比如 <a href="#sec-75">MenubarItem</a>。</li>
+<li><code>ctx.windows</code> 列出应用的窗口，并报告某个窗口打开或关闭。</li>
+<li><code>ctx.embeds</code> 在窗口布局里放置一个 <code>WebContentsView</code>；见<a href="#sec-76">嵌入式 Web 视图</a>。</li>
+<li><code>ctx.serverEndpoints.get(id)</code> 返回一个服务器的 URL 和凭据。桌面应用自己的服务器是 <code>"sidecar"</code>。</li>
+<li><code>ctx.cli</code> 描述桌面应用运行的 OpenCode CLI。</li>
+<li><code>ctx.log.write</code> 写入桌面日志文件。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<p><code>@opencode/plugin/gui/main</code> 把下面的 <code>MainStorage</code> 和 <code>MainEmbeds</code> 作为 <code>Storage</code> 和 <code>Embeds</code> 导出：</p>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  onCleanup(fn: Cleanup): void
+  storage: MainStorage
+  provide&lt;S extends IpcSpec&gt;(token: Ipc&lt;S&gt;, impl: IpcImpl&lt;S&gt;): IpcProvider&lt;S&gt;
+  add&lt;T&gt;(registry: Registry&lt;T&gt;, item: () =&gt; T | undefined): Cleanup
+  add&lt;T&gt;(registry: Registry&lt;T&gt;, item: T): Cleanup
+  list&lt;T&gt;(registry: Registry&lt;T&gt;): T[]
+  t(key: string, params?: Record&lt;string, string | number | boolean&gt;): string
+  plural(key: string, count: number, params?: Record&lt;string, string | number | boolean&gt;): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record&lt;string, unknown&gt;): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T }): Persisted&lt;T, T&gt;
+  remove(key: string): void
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) =&gt; void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record&lt;string, string&gt;
+  sameMachine: boolean
+  password?: string
+}</code></pre>
+
+<h2>定义并提供 Ipc</h2>
+<p>一个 <code>Ipc</code> 规格可以声明每窗口的 <code>state</code>、可调用的 <code>methods</code>、和推送的 <code>events</code>。Effect <code>Schema</code> 校验并编码所有跨桥的值：</p>
+<div class="term-head"><span>src/gui/contract.ts</span><span>TypeScript</span></div>
+<pre><code>import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const Counter = Ipc.define({
+  id: "acme.counter",
+  state: Schema.Struct({ count: Schema.Number }),
+  methods: {
+    increment: {
+      input: Schema.Number,
+      output: Schema.Number,
+    },
+    reset: {},
+  },
+  events: {
+    overflow: Schema.Struct({ limit: Schema.Number }),
+  },
+})</code></pre>
+
+<ul>
+<li>id 是你的插件 id 或以其开头，如 <code>acme.counter</code>。其它 id 会让 <code>main</code> 里的 <code>ctx.provide</code> 和窗口里的 <code>ctx.main</code> 抛错。</li>
+<li>不接收参数的方法省略 <code>input</code>；不返回值的方法省略 <code>output</code>。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record&lt;string, { input?: Schema; output?: Schema }&gt;
+  events?: Record&lt;string, Schema&gt;
+}</code></pre>
+
+<h3>在 main 中实现提供方</h3>
+<p>每个方法收到解码后的输入和一个 <code>Caller</code>（<code>{ window, signal }</code>）。<code>state</code> 变化时调用 <code>provider.changed(window?)</code> 把新快照推给订阅的窗口；用 <code>provider.emit(name, payload, window?)</code> 发送事件：</p>
+<div class="term-head"><span>src/gui/main.ts</span><span>TypeScript</span></div>
+<pre><code>import type { Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+
+export const main: Plugin.MainSetup = (ctx) =&gt; {
+  const counts = new Map&lt;number, number&gt;()
+
+  const provider = ctx.provide(Counter, {
+    state: (window: number) =&gt; ({ count: counts.get(window) ?? 0 }),
+    increment: (step, caller) =&gt; {
+      const next = (counts.get(caller.window) ?? 0) + step
+      counts.set(caller.window, next)
+      provider.changed(caller.window)
+
+      if (next &gt; 100) provider.emit("overflow", { limit: 100 }, caller.window)
+
+      return next
+    },
+    reset: (_input, caller) =&gt; {
+      counts.set(caller.window, 0)
+      provider.changed(caller.window)
+    },
+  })
+}</code></pre>
+
+<ul>
+<li>带 <code>state</code> 的规格在实现里也需要 <code>state(window)</code>。主进程在窗口订阅时以及每次 <code>changed</code> 时读取它。</li>
+<li>抛错的方法会让窗口那次调用 reject。</li>
+<li>省略 <code>window</code> 时，<code>changed</code> 和 <code>emit</code> 到达每个窗口。</li>
+<li><code>dispose()</code> 提前撤回该 <code>Ipc</code>。窗口看到它处于 <code>pending</code>，<code>ctx.main</code> 的调用等待，直到插件再次提供或停止。宿主也会在插件停止时撤回它。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>type IpcImpl&lt;S extends IpcSpec&gt; = {
+  [Name in keyof S["methods"]]: (input: Input&lt;Name&gt;, caller: Caller) =&gt; Output&lt;Name&gt; | Promise&lt;Output&lt;Name&gt;&gt;
+} &amp; { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider&lt;S extends IpcSpec&gt; {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
+}</code></pre>
+
+<h3>在窗口中使用 Ipc</h3>
+<p>在窗口里，<code>ctx.main(Counter)</code> 返回你的 <code>main</code> 提供的该 <code>Ipc</code> 的客户端。没有 <code>input</code> schema 的方法只接受可选的 <code>{ signal }</code> 调用选项，不要把 <code>undefined</code> 当第一个参数传：</p>
+<div class="term-head"><span>src/gui/window.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup&lt;typeof definition&gt; = (ctx) =&gt; {
+  const counter = ctx.main(Counter)
+
+  // 跨重启跟随 main；插件停止时移除。
+  counter.on("overflow", (data) =&gt; console.log(`Counter exceeded ${data.limit}`))
+
+  ctx.add(Command, () =&gt; ({
+    id: "increment",
+    title: ctx.t("command.increment"),
+    enabled: ctx.app.platform === "desktop",
+    run: async () =&gt; {
+      await counter.increment(1, { signal: ctx.signal })
+      await counter.reset({ signal: ctx.signal })
+    },
+  }))
+}</code></pre>
+
+<ul>
+<li>调用在 <code>main</code> 启动期间等待。<code>main</code> 无法应答时会 reject：在 Web 上（插件的 <code>main</code> 不在或失败），或方法抛错时。在用户需要反馈的地方接住这个拒绝。</li>
+<li><code>state()</code> 和 <code>on()</code> 跨重启跟随 <code>main</code>。监听器随当前属主结束，否则随插件结束。</li>
+<li><code>ctx.main</code> 对同一个 token 每次调用返回同一个客户端。</li>
+</ul>
+
+<p>用 <code>client.state()</code> 读取本窗口的 <code>state</code>。第一个快照到达之前它是 <code>undefined</code>，之后每次 <code>main</code> 调用 <code>changed</code> 时更新：</p>
+<div class="term-head"><span>TSX</span><span></span></div>
+<pre><code>const count = () =&gt; ctx.main(Counter).state()?.count ?? 0</code></pre>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>type IpcClient&lt;S extends IpcSpec&gt; = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input&lt;Name&gt;, options?: { signal?: AbortSignal }) =&gt; Promise&lt;Output&lt;Name&gt;&gt;
+    : (options?: { signal?: AbortSignal }) =&gt; Promise&lt;Output&lt;Name&gt;&gt;
+} &amp; {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) =&gt; void): Cleanup
+}</code></pre>
+
+<p>在 <code>src/gui.tsx</code> 里用两个 setup 定义插件：<code>Plugin.define({ ...definition, setup, main })</code>。</p>
+
+<h3>其它插件</h3>
+<p>另一个插件用 <code>ctx.use(Counter)</code> 跟随你的 <code>Ipc</code>，就像跟随一个契约。它处于 <code>active</code> 时，其值就是同一个 <code>IpcClient</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const counter = ctx.use(Counter)
+
+const count = () =&gt; {
+  const live = counter()
+
+  return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}</code></pre>
+
+<ul>
+<li>每个 <code>Ipc</code> 在 Web 上都是 <code>inactive</code>，因为那里没有主进程运行。</li>
+</ul>
+
+<h2>原生应用菜单</h2>
+<p><code>main</code> 用来自 <code>@opencode/plugin/gui/main</code> 的 <code>MenubarItem</code> 向原生菜单（macOS 的 App、File、Edit、View、Go、Window、Help 菜单）以及 Windows 和 Linux 上的应用内菜单添加条目：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { MenubarItem } from "@opencode/plugin/gui/main"
+
+ctx.add(
+  MenubarItem,
+  (): MenubarItem =&gt; ({
+    menu: "help",
+    id: "diagnostics",
+    after: "logs.export",
+    label: ctx.t("menu.diagnostics"),
+    enabled: () =&gt; true,
+    run: (focusedWindow) =&gt; {
+      focusedWindow?.webContents.focus()
+    },
+  }),
+)</code></pre>
+
+<ul>
+<li><code>after</code> 指定它跟随的条目：本插件的条目按 id，内置条目按其命令、否则按其动作、否则按其角色，例如 <code>logs.export</code>、<code>edit.copy</code> 或 <code>about</code>。没有匹配时，条目排在菜单末尾。</li>
+<li><code>app</code> 条目只在 macOS 出现。</li>
+<li><code>run</code> 收到聚焦的窗口（如有）。</li>
+<li>主进程每次构建菜单时都会执行这个函数，所以标签跟随语言。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}</code></pre>
+
+<h2>嵌入式 Web 视图</h2>
+<p>要把一个隔离的 <code>WebContentsView</code> 嵌入面板，在 <code>main</code> 里创建它，再从窗口渲染它的盒子：</p>
+<div class="term-head"><span>src/gui/main.ts</span><span>TypeScript</span></div>
+<pre><code>import { type BrowserWindow, WebContentsView } from "electron"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) =&gt; {
+  const attach = (window: BrowserWindow) =&gt; {
+    const view = new WebContentsView()
+    const embed = ctx.embeds.create(view, window)
+    void view.webContents.loadURL("https://acme.example")
+    embed.show(true)
+    // 通过你的 Ipc 把 embed.id 发给窗口。
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
+}</code></pre>
+<div class="term-head"><span>src/gui/pane.tsx</span><span>TSX</span></div>
+<pre><code>&lt;ctx.embeds.View id={embedId} visible radius={8} /&gt;</code></pre>
+
+<ul>
+<li><code>"open"</code> 只对之后打开的窗口触发，所以先挂到 <code>ctx.windows.list()</code> 上。</li>
+<li>窗口把 embed 的 <code>id</code> 传给 <code>ctx.embeds.View</code> 和 <code>ctx.embeds.capture</code>。</li>
+<li><code>show(visible)</code> 是页面一侧的可见性：只有窗口为它布局、且 <code>show(true)</code> 生效时视图才显示。</li>
+<li><code>on("visible", handler)</code> 在视图上屏或离屏时运行，包括窗口用一张静帧替代它的时刻。</li>
+<li><code>capture()</code> 返回页面的一张静帧；隐藏时为 <code>undefined</code>。</li>
+<li><code>dispose()</code> 从窗口移除视图，但不关闭它的页面；用完后调用 <code>view.webContents.close()</code>。宿主也会在插件消失时销毁 embed。</li>
+<li>在窗口里，<code>View</code> 用 embed 填满它的盒子。宿主保持视图的边界、缩放、圆角和对话框遮挡同步，并在窗口隐藏或对话框打开时隐藏它。</li>
+<li><code>frozen</code> 用一张静帧代替实时视图，这样 DOM 内容可以浮在它上面。<code>radius</code> 给底部圆角；<code>background</code> 是圆角露出的颜色。</li>
+<li><code>page</code> 是 embed 展示的内容，比如它的 URL。面板移动期间，宿主在原处绘制 embed 的静帧，并丢弃 <code>page</code> 还是别的值时拍的静帧。</li>
+<li>窗口的 <code>capture(id)</code> 返回一张 JPEG 静帧；embed 隐藏时为 <code>undefined</code>，在 Web 上永远如此。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) =&gt; void): Cleanup
+  capture(): Promise&lt;NativeImage | undefined&gt;
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise&lt;Uint8Array | undefined&gt;
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  page?: string
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}</code></pre>
+
+<h2>活性依赖与失败处理</h2>
+<p><code>ctx.use(token)</code> 返回一个响应式 <code>Live&lt;T&gt;</code> 的访问器：提供该 token 的插件的状态。提供方不在线时你的插件继续运行，所以要处理非 <code>active</code> 的状态。任何控件都不应该死掉，任何加载指示都不应该永远转下去：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Browser } from "@opencode/plugin/gui/browser"
+
+const browser = ctx.use(Browser)
+
+ctx.add(Command, () =&gt; {
+  const live = browser()
+  const session = ctx.sessions.current()
+
+  return {
+    id: "preview",
+    title: ctx.t("command.preview"),
+    enabled: live.status === "active" &amp;&amp; !!session,
+    run: () =&gt; {
+      if (live.status === "active" &amp;&amp; session) live.value.open(session, "http://localhost:3000")
+    },
+  }
+})</code></pre>
+
+<ul>
+<li><strong><code>pending</code>：</strong>提供方还没启动，比如它的插件正在加载或重启。展示加载态，或隐藏可选控件。</li>
+<li><strong><code>active</code>：</strong>提供方在运行，<code>value</code> 是它的契约或 <code>Ipc</code> 客户端。<code>generation</code> 计数激活次数，重启过的提供方会带着新的计数回来。</li>
+<li><strong><code>inactive, disabled</code>：</strong>提供方被关闭、不存在、或在该平台不可用——Web 上所有 <code>Ipc</code> 都如此。展示不可用态，或省掉控件。</li>
+<li><strong><code>inactive, failed</code>：</strong>提供方的 setup 抛了错。展示不可用态。</li>
+<li>你自己的 <code>main</code> 没有 <code>Live</code> 状态。通过 <a href="#sec-73">ctx.main</a> 的调用在它启动期间等待，无法应答时 reject。</li>
+</ul>
+
+<h4>参考（Reference）</h4>
+<div class="term-head"><span>TypeScript</span><span>类型定义</span></div>
+<pre><code>type Live&lt;T&gt; =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" }</code></pre>
+
+<h2>生命周期与清理</h2>
+<p>通过 <code>ctx</code> 注册的一切（<code>ctx.add</code>、<code>ctx.provide</code>、<code>ctx.dialogs.open</code>、<code>ctx.embeds.create</code> 以及 <code>Ipc</code> 事件监听器）都会在所属作用域结束时被撤回：</p>
+
+<ul>
+<li>在组件或 <code>createKeyed</code> 回调里，注册在该组件或 <code>createKeyed</code> 运行销毁时结束。</li>
+<li>在 <code>setup</code> 顶层，注册在插件被禁用、重载、移除，或其窗口关闭时结束。</li>
+<li>在 <code>main</code> 里，注册在插件被禁用、重载、移除，或应用退出时结束。embed 还会在其窗口关闭时结束。</li>
+</ul>
+
+<p>其它资源（比如定时器或 socket），从 setup 返回一个清理函数。它与上面的撤回同时发生：</p>
+
+<ul>
+<li><strong>窗口 <code>setup</code></strong>不能是 <code>async</code>，因为它运行在 Solid 属主之下。返回一个清理函数，或用 <code>onCleanup</code> 或 <code>ctx.signal</code>。</li>
+<li><strong><code>main</code></strong>可以是 <code>async</code>。返回（或兑现为）一个清理函数，或用 <code>ctx.onCleanup(fn)</code>。</li>
+</ul>
+
+<h3>窗口 setup</h3>
+<p>窗口 <code>setup</code> 必须是同步的。在 <code>createKeyed</code> 或 <code>createLatest</code> 里启动异步工作：</p>
+<div class="term-head"><span>src/gui.tsx</span><span>TypeScript · TSX</span></div>
+<pre><code>import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+export default Plugin.define({
+  i18n: { en: { changes: "Show changes" } },
+  setup(ctx) {
+    // 对 Changes 的每个活跃代际运行一次；命令随它一起撤回。
+    createKeyed(ctx.use(Changes), (changes) =&gt; {
+      ctx.add(Command, () =&gt; ({
+        id: "changes",
+        title: ctx.t("changes"),
+        run: () =&gt; {
+          const session = ctx.sessions.current()
+
+          if (session) changes.open(session)
+        },
+      }))
+    })
+
+    const timer = setInterval(() =&gt; console.log("still here"), 60_000)
+
+    return () =&gt; clearInterval(timer)
+  },
+})</code></pre>
+
+<h3>主进程 setup</h3>
+<p><code>main</code> 可以是 <code>async</code>。为它打开的资源返回（或兑现为）一个清理函数，或用 <code>ctx.onCleanup(fn)</code> 注册：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>async main(ctx) {
+  const socket = await connect(ctx.options)
+
+  ctx.onCleanup(() =&gt; socket.close())
+}</code></pre>
+
+<ul>
+<li><code>ctx.onCleanup</code> 在插件被禁用、重载、移除或应用退出时运行其函数，后注册的先运行。插件已经不在时，它会立即运行该函数。</li>
+<li><code>await</code> 之后，在注册或修改任何东西之前，先检查 <code>ctx.signal</code> 是否已中止并提前返回。</li>
+<li>异步清理会把退出延迟到它完成，最多 3 秒。</li>
+</ul>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>GUI 插件的「所有权」模型一句话概括：<strong>谁注册，谁的作用域结束谁收回</strong>。你在 setup 顶层注册的东西活得和插件一样长；在组件或 <code>createKeyed</code> 里注册的东西只活到那次运行结束。这套模型让你几乎不用手写「取消订阅」——但定时器、socket 这类 <code>ctx</code> 不知道的资源仍要自己返回清理函数。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

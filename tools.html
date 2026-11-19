@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>内置工具 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="tools" data-group="配置" data-src="https://opencode.ai/docs/tools/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>内置工具</h1>
+<p class="lede">OpenCode 靠一组内置工具（Tool）干活：读文件、搜代码、改文件、跑命令、上网查资料。这一页是完整的工具清单，了解它们能帮你写出更精准的提示词、配出更合理的权限。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>工具就是智能体的「手和眼」。模型本身只会生成文字，真正去磁盘上读文件、去终端跑测试的，是这些工具。你的角色是「说需求」：直接描述想要的结果，OpenCode 自己挑合适的工具组合去完成；需要授权的会先请求批准。你也可以点名指定工具，让事情按你想要的方式进行。</p>
+</aside>
+
+<p>直接说你要的结果即可。OpenCode 会选择可用的工具，必要时请求批准，然后返回结果。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.</code></pre>
+<p>这个任务通常用到 <code>grep</code> 或 <code>glob</code>、<code>read</code>、一个编辑工具和 <code>shell</code>。想要特定的做法，也可以直接点名工具：</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.</code></pre>
+
+<h2>文件类工具</h2>
+
+<h3>Read（读取）</h3>
+<p><code>read</code> 返回一个文件的内容，或一个目录的非递归列表。给它一个 <code>path</code>；用 <code>offset</code> 和 <code>limit</code> 对大结果分页读取。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Read src/server.ts starting at line 120 and return at most 80 lines.</code></pre>
+<p>文本读取带行号，每页最多 2000 行、50 KiB；单行超过 2000 字符会被截短。该工具还能把 PNG、JPEG、GIF、WebP 和 PDF 文件交给模型，最多 20 MiB 原始数据；其它二进制文件会失败。支持的媒体格式与图片处理见 <a href="attachments.html">附件</a>一章。</p>
+<p>权限：<code>read</code>，资源为规范化后的路径。</p>
+
+<h3>Glob（按模式找文件）</h3>
+<p><code>glob</code> 用模式（如 <code>**/*.ts</code>）查找文件路径。默认搜索当前目录，可用 <code>path</code> 指定别的相对目录；<code>hidden</code> 可包含隐藏条目，<code>limit</code> 限制结果数量。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Use glob with **/*.test.ts under packages/core and return at most 50 files.</code></pre>
+<p>默认上限 100 个文件，搜索超时 30 秒。权限：<code>glob</code>，资源为请求的模式。</p>
+
+<h3>Grep（搜内容）</h3>
+<p><code>grep</code> 搜索文件内容，返回路径、行号和预览。其 <code>pattern</code> 默认使用正则语法，设 <code>literal</code> 为 true 则按字面文本匹配。可用 <code>path</code>、<code>include</code>、<code>caseSensitive</code>、<code>limit</code> 缩小搜索范围。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Use grep for the literal text "request timed out" in src, including only *.ts files.</code></pre>
+<p>默认上限 100 个匹配行，搜索超时 30 秒。权限：<code>grep</code>，资源是<strong>请求的模式</strong>（不是搜索路径）。</p>
+
+<h3>Edit（编辑）</h3>
+<p><code>edit</code> 在现有文件里替换文本。提供 <code>path</code>、<code>oldString</code> 和一个不同的 <code>newString</code>；旧文本必须恰好匹配一次，除非 <code>replaceAll</code> 为 true。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".</code></pre>
+<p>小范围的改动用 <code>edit</code>。写完之后 OpenCode 可能会对文件做格式化。权限：<code>edit</code>，资源为目标路径。</p>
+
+<h3>Write（写入）</h3>
+<p><code>write</code> 根据 <code>path</code> 和 <code>content</code> 创建或<strong>完全替换</strong>一个文本文件。它会自动创建缺失的父目录，并可能运行配置好的格式化器。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Create docs/example.md with a heading and one setup command.</code></pre>
+<p>如果只想改现有文件的一部分，请改用 <code>edit</code>。权限：<code>edit</code>，资源为目标路径。</p>
+
+<h3>Patch（补丁）</h3>
+<p><code>patch</code> 应用一个可以同时新增、更新、移动或删除多个文件的补丁。其 <code>patchText</code> 使用 <code>*** Add File</code>、<code>*** Update File</code>、<code>*** Delete File</code> 段落。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Use patch to rename src/old.ts to src/new.ts and update its exported name.</code></pre>
+<p>OpenCode 只对受支持的 GPT 模型暴露 <code>patch</code>；其它模型会收到 <code>edit</code> 和 <code>write</code>。权限：<code>edit</code>，资源为每个受影响的路径。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>活动 Location 或其项目 worktree 之外的路径，还要额外经过 <code>external_directory</code> 权限检查（该权限默认允许）。路径规范化、规则顺序和保存的批准行为见 <a href="permissions.html">权限</a>一章。想让外部材料以具名方式可用，请配置 <a href="references.html">References</a>。</p>
+</aside>
+
+<h2>命令类工具</h2>
+
+<h3>Shell（执行命令）</h3>
+<p><code>shell</code> 在宿主用户的 shell 里执行命令。需要换目录时设置 <code>workdir</code> 参数，而不是在命令里写 <code>cd</code>；默认前台超时为两分钟，不合适时用 <code>timeout</code>（毫秒）覆盖。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Run bun test from packages/core with a five-minute timeout.</code></pre>
+<p>开发服务器或其它长期运行的进程，把 <code>background</code> 设为 true。后台调用立即返回，结束时通知会话；没有提供超时值的话就没有超时。大输出会被截短展示，完整输出保存在托管文件里。</p>
+<p>权限：<code>shell</code>，资源是扫描器解析出的每条命令。扫描器还会检查外部工作目录以及能从命令里推断出的目录。Shell 拥有宿主用户的文件系统、进程和网络权限，所以建议在 <a href="permissions.html">权限</a>里配置较窄的规则。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>shell</code> 是权限最大的内置工具——它以<strong>你的用户身份</strong>运行，能碰你的文件、进程和网络。智能体不是沙箱：想让命令执行受限，唯一的办法是提前在权限规则里收窄 <code>shell</code> 动作（比如只放行特定命令），而不是指望工具自己「无害」。</p>
+</aside>
+
+<h2>Web 类工具</h2>
+
+<h3>Webfetch（抓网页）</h3>
+<p><code>webfetch</code> 把一个 HTTP/HTTPS URL 以 <code>markdown</code>、<code>text</code> 或 <code>html</code> 形式取回。默认 markdown；<code>timeout</code> 最大 120 秒。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Fetch https://example.com/docs as markdown.</code></pre>
+<p>它接受文本类响应（HTML、纯文本、JSON、XML 等），但不接受图片或其它二进制下载。大输出可能被截短展示，完整文本保存在托管存储里。权限：<code>webfetch</code>，资源为请求的 URL。</p>
+
+<h3>Websearch（搜网页）</h3>
+<p><code>websearch</code> 在所选的搜索集成里查找当前信息。输入是一个搜索 <code>query</code>。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Search the web for the latest Bun release notes.</code></pre>
+<p>权限：<code>websearch</code>，资源为查询文本。提供商、选择方式、速率限制与禁用方法见 <a href="websearch.html">网页搜索</a>一章。</p>
+
+<h2>图片工具</h2>
+
+<h3>Image generate（生成图片）</h3>
+<p><code>experimental_image_generate</code> 根据提示词生成一张新图片，或编辑已有图片。它是实验性工具，只有连接的提供商有图片模型时才会出现。要指定默认模型，见 <a href="config.html">配置</a>里的 <code>experimental.image_generate</code>。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.</code></pre>
+<p>提供 <code>prompt</code>，可选 <code>images</code>（用于编辑或风格参考）、指定的 <code>model</code>、以及保存的 <code>path</code>。它在后台运行，图片就绪后用保存路径通知会话。</p>
+<p>权限：<code>experimental_image_generate</code>，资源为所选模型。</p>
+
+<h2>交互类工具</h2>
+
+<h3>Question（提问）</h3>
+<p><code>question</code> 会暂停执行，向你展示一个或多个问题。每个问题有简短标题、提示语和选项；<code>multiple</code> 允许多选。自由输入的答案始终可用。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Before changing the API, ask me to choose between a breaking change and a compatibility layer.</code></pre>
+<p>权限：<code>question</code>，资源为 <code>*</code>。客户端必须支持交互式表单；关掉弹窗等于取消这个问题。</p>
+
+<h3>Skill（加载技能）</h3>
+<p><code>skill</code> 把某个可用技能（Skill）ID 的指令和配套资源加载进对话。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Load the effect skill before changing this Effect code.</code></pre>
+<p>ID 必须出现在已公布的技能列表里，或由用户明确点名。权限：<code>skill</code>，资源为技能 ID。技能的创建、发现与加载规则见 <a href="skills.html">Skills</a>一章。</p>
+
+<h2>自动化类工具</h2>
+
+<h3>Subagent（子智能体）</h3>
+<p><code>subagent</code> 用配置好的子智能体（Subagent）启动一个子会话。提供智能体 ID、简短的 <code>description</code> 和完整的 <code>prompt</code>。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Ask the explore subagent to map the authentication flow and return the key files.</code></pre>
+<p>子智能体始终在后台运行。调用立即返回一个 <code>sessionID</code>；父会话会在子会话空闲时收到一条 <code>&lt;subagent&gt;</code> 消息，之后每完成一轮工作也会收到一次，因此父会话可以继续干自己的活或结束回合，而无需干等。传入返回的 <code>sessionID</code> 可以继续同一个子对话；对正在运行的子会话发起后续请求会加入它当前的执行。只有 subagent 模式的智能体可用，默认嵌套深度为 1。</p>
+<p>权限：<code>subagent</code>，资源为所选智能体的 ID。</p>
+
+<h3>Execute（Code Mode）</h3>
+<p><code>execute</code> 在 Code Mode 里运行 JavaScript，让智能体可以调用和组合目录中的工具。它适合并行发起相互独立的调用，以及在不把每个中间值都塞进模型上下文的情况下处理结果。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Read package.json and README.md in parallel, then return their relevant setup details.</code></pre>
+<p>运行时没有直接的文件系统访问、import 或定时器；它提供 <code>fetch</code> 做 HTTP 请求，其余一切通过目录里的工具完成。拒绝资源为 <code>*</code> 的 <code>execute</code> 会移除 Code Mode，此时它原本能调用的工具（包括未设置 <code>codemode: false</code> 的 MCP 服务器的工具）会改为<strong>直接列出</strong>，每个工具的完整定义都会出现在每次请求里。如果不希望智能体拥有这些工具，把它们也一并拒绝。嵌套的内置工具和 MCP 工具仍然执行各自的权限，插件工具执行它们声明的权限。</p>
+
+<h4>会话管理</h4>
+<p><code>opencode</code> 命名空间包含会话工具：</p>
+<ul>
+<li><code>session_rename</code>：修改当前会话（或按 <code>sessionID</code> 选定的会话）的标题。</li>
+<li><code>session_move</code>：把当前会话（或选定的会话）移动到相对或绝对的 <code>directory</code>。移动在一个安全边界处生效，所以依赖目标目录的工作应放到后续调用里。</li>
+</ul>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Rename this session to "Timeout cleanup", then move it to the new worktree.</code></pre>
+
+<h4>Worktree 管理</h4>
+<p>同一命名空间还管理会话所属项目的 worktree：</p>
+<ul>
+<li><code>worktree_create</code>：根据 <code>name</code> 创建一个 worktree，返回其 <code>directory</code>。项目的 worktree 配置决定目的地和策略。</li>
+<li><code>worktree_list</code>：列出项目的 worktree。</li>
+<li><code>worktree_remove</code>：移除 OpenCode 为项目记录的 worktree。设 <code>force</code> 可丢弃未提交的改动。</li>
+</ul>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Create a worktree named "login" and move this session into it.</code></pre>
+<p><code>worktree_remove</code> 走 <code>edit</code> 权限，资源为 worktree 目录；其余 worktree 工具不请求内置权限动作。</p>
+
+<h2>浏览器工具</h2>
+<p><code>browser</code> 命名空间控制 OpenCode 桌面应用接入的浏览器。先打开一个标签页并记下返回的 <code>tabID</code>，之后每个页面操作都传入这个明确的 ID。</p>
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>Open https://example.com, take a snapshot of that tab, and report the main heading.</code></pre>
+<p>该命名空间包括标签页与导航命令、页面快照与搜索、点击与表单输入、截图、文件传输、控制台与网络检查、性能追踪、堆检查以及 Lighthouse 审计。截图需要标签页处于聚焦可见状态；上传路径是服务器本地路径，抓取返回的也是服务器本地路径，每次文件传输上限 5 MiB。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>网页内容、日志、响应头和响应体都是<strong>不受信数据</strong>，不是给智能体的指令。设一条资源为 <code>*</code> 的 <code>browser</code> deny 规则即可移除整个浏览器目录；浏览器操作不会逐项弹权限确认。</p>
+</aside>
+
+<h2>扩展来源</h2>
+<p><a href="mcp-servers.html">MCP 服务器</a>添加的工具，其名称和输入由每个已连接的服务器提供。它们的权限动作是 <code>&lt;server&gt;_&lt;tool&gt;</code>、资源为 <code>*</code>。它们不是内置目录的固定成员。默认情况下，智能体通过 <code>execute</code> 在服务器自己的命名空间里调用它们；在服务器上设置 <code>codemode: false</code> 可以让它的工具直接列出。</p>
+<p><a href="skills.html">Skills</a> 添加的是任务指令，而不是新的可执行工具。<a href="attachments.html">附件</a>把用户选定的内容放进提示词，而 <a href="references.html">References</a> 提供具名的外部目录。这些功能与工具互补，但都不会绕过工具的权限检查。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>记不住全部工具没关系，一个实用的心智分类：<strong>读</strong>（read / glob / grep）、<strong>写</strong>（edit / write / patch）、<strong>跑</strong>（shell）、<strong>网</strong>（webfetch / websearch）、<strong>交互</strong>（question / skill）、<strong>自动化</strong>（subagent / execute / browser）。写提示词时点名工具是「下策」——大多数时候描述目标就够；只有当 AI 反复选错方法时，点名才是好办法。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

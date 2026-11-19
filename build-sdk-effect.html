@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effect SDK · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="build-sdk-effect" data-group="构建与集成" data-src="https://opencode.ai/docs/build/sdk/effect/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Effect SDK</h1>
+<p class="lede"><code>@opencode/sdk/effect</code> 是 Effect 原生的嵌入式 SDK。操作返回类型化的 Effect 和 Stream；关闭持有它的 <code>Scope</code> 会释放路由器、Location 服务、fiber 和插件注册。</p>
+
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>bun add @opencode/sdk effect@4.0.1</code></pre>
+
+<h2>创建宿主（host）</h2>
+<p>在 <code>Effect.scoped</code> 里创建宿主，然后使用它生成的 API 组或 <code>sessions</code> 别名：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)</code></pre>
+
+<p>嵌入式宿主使用与 <code>@opencode/client/effect</code> 相同的 schema 值、已声明错误、请求选项和 Stream：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()</code></pre>
+
+<h2>流式事件（Stream events）</h2>
+<p>流式端点返回 Effect <code>Stream</code> 值。需要在后台持续运行的消费者，fork 进宿主 Scope：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) =&gt; Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)</code></pre>
+
+<h2>定制（Customize）</h2>
+<p>通过注册 Effect 插件定制你的 OpenCode 实例。用嵌入式宿主定制 agents、模型、工具和其它行为：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =&gt;
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) =&gt; {
+        agents.update("build", (agent) =&gt; {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)</code></pre>
+
+<p>插件的钩子、转换、工具和完整插件上下文见 <a href="build-plugins-effect.html">Effect 插件</a>全篇。</p>
+
+<h2>Layer</h2>
+<p>当嵌入式宿主应当作为一个应用服务（application service）时，用 <code>OpenCode.layer()</code>：</p>
+<div class="term-head"><span>TypeScript</span><span></span></div>
+<pre><code>import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>OpenCode.layer()</code> 创建的宿主由 <code>Effect.provide</code> 的作用域管理：程序结束宿主就关闭。想要一个长期存活、可被多处共享的宿主，请用上面 <code>Effect.scoped</code> + <code>forkScoped</code> 的方式持有它，别指望 layer 跨多次 <code>runPromise</code> 存活。</p>
+</aside>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>和 <a href="build-sdk.html">Promise 版 SDK</a>对照着记：<code>await using opencode = await OpenCode.create()</code> 的资源释放 ↔ <code>Effect.scoped</code> 里创建、Scope 关闭时自动释放；<code>opencode.plugin(plugin)</code> ↔ <code>yield* opencode.plugin(plugin)</code>。额外赠送的是 <code>OpenCode.layer()</code>——把宿主变成 Effect 的依赖注入服务，整个应用里到处 <code>yield* OpenCode.Service</code> 就能用。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

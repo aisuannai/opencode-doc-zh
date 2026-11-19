@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上下文压缩 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="compaction" data-group="配置" data-src="https://opencode.ai/docs/compaction/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>上下文压缩</h1>
+<p class="lede">压缩（Compaction）用一个摘要替换较早的对话，给长会话腾出空间，让会话能一直用到超过模型的上下文上限。</p>
+
+<h2>工作原理（How it works）</h2>
+<p>当会话接近模型的上下文上限时，OpenCode 会把当前的整段对话总结成一份摘要。同时它会在摘要旁边保留最近的对话（默认约 15,000 token），让最近的精确细节仍然可用：</p>
+
+<div class="term-head"><span>text</span><span>压缩前后对比</span></div>
+<pre><code>before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+request  [ system prompt ][ older conversation ............ ][ recent 15k ][ summary instructions ]
+after    [ system prompt ][ summary of older + recent ][ recent 15k ][ pending work ]</code></pre>
+
+<p>发送完整对话来生成摘要，可以在提供商支持时复用正常请求的提示词缓存（prompt cache）。之后的每次压缩都会用「自上次检查点以来的对话」更新已有摘要。</p>
+
+<h2>开始压缩（Start）</h2>
+<p>自动压缩默认开启：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>压缩是<strong>有损</strong>的（lossy）——摘要不可能逐字保留所有细节。最近的精确细节很重要时，调大 <code>keep.tokens</code>；或者赶在自动压缩之前自己手动触发一次。</p>
+</aside>
+
+<h2>手动压缩（Manual）</h2>
+<p>可以随时请求压缩，即使历史很短：</p>
+
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>opencode api post /api/session/ses_example/compact --data '{}'</code></pre>
+
+<p><code>api</code> 命令会发现后台服务并完成认证。它的响应只确认请求被接受，<strong>不会</strong>等摘要生成完。关注 <code>session.compaction.*</code> 事件来了解它何时完成。完整操作见 <a href="api.html">API 参考</a>。</p>
+
+<table>
+<thead>
+<tr><th>规则</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td>时机</td><td>在下一个安全点运行，位于仍在等待的 prompt 之前。</td></tr>
+<tr><td>重复请求</td><td>已有一次压缩进行中时，新的请求会合并进去。</td></tr>
+<tr><td>自动化</td><td><code>compaction.auto</code> 为 <code>false</code> 时手动请求仍然有效。</td></tr>
+</tbody>
+</table>
+
+<p>传入一个 <code>id</code> 可以让精确的重试具有幂等性。同一个 ID 用在另一个请求上会返回冲突：</p>
+
+<div class="term-head"><span>sh</span><span></span></div>
+<pre><code>opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'</code></pre>
+
+<h2>设置（Settings）</h2>
+<p>在任意 <a href="config.html">OpenCode 配置文件</a>里加 <code>compaction</code>：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": "20%",
+  },
+}</code></pre>
+
+<table>
+<thead>
+<tr><th>字段</th><th>默认</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td><code>auto</code></td><td><code>true</code></td><td>在接近上下文上限时自动压缩；当提供商拒绝「请求过长」时自动恢复一次。手动压缩始终可用。</td></tr>
+<tr><td><code>background</code></td><td><code>true</code></td><td>提前写好摘要，让自动压缩不用现场等待。见「后台压缩」一节。</td></tr>
+<tr><td><code>keep.tokens</code></td><td><code>15000</code></td><td>摘要旁保留的最近对话的近似 token 数。值越大细节保留越多，但留给新工作的空间越少。</td></tr>
+<tr><td><code>buffer</code></td><td><code>"15%"</code>，至少 16k</td><td>模型上下文窗口中保留空闲的比例。对话到达其余部分时自动压缩启动。值越大压缩越早。</td></tr>
+</tbody>
+</table>
+
+<p><code>keep.tokens</code> 接受非负整数。</p>
+
+<h3>Buffer（缓冲区）</h3>
+<p><code>buffer</code> 是每个模型窗口的百分比，所以一个设置适配所有模型：</p>
+
+<table>
+<thead>
+<tr><th>模型窗口</th><th><code>"buffer": "20%"</code> 时压缩点</th></tr>
+</thead>
+<tbody>
+<tr><td>128k</td><td>约 102k</td></tr>
+<tr><td>1M</td><td>800k</td></tr>
+</tbody>
+</table>
+
+<ul>
+<li>它表示<strong>保留空闲的空间</strong>，不是压缩启动点：<code>"20%"</code> 表示窗口装到 80% 时压缩。</li>
+<li>接受 <code>"1%"</code> 到 <code>"99%"</code>，包括 <code>"12.5%"</code> 这样的小数。</li>
+<li>也可以直接给 token 数，如 <code>20000</code>。同一个数字在小窗口里占很大比例，在大窗口里只占很小比例。</li>
+<li>token 数大于等于模型窗口时会被忽略，回退到默认值。</li>
+</ul>
+
+<h2>摘要模型（Model）</h2>
+<p>默认由 OpenCode 用会话自己的模型写摘要。设置 <code>agents.compaction.model</code> 可以换一个模型来写摘要：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "compaction": { "model": "anthropic/claude-sonnet-5-5" },
+  },
+}</code></pre>
+
+<p>如果该模型无法解析，OpenCode 回退到会话的模型。</p>
+
+<h2>后台压缩（Background compaction）</h2>
+<p>OpenCode 会提前写好摘要——会话继续运行——等压缩时机到了再换入。这样自动压缩就不需要暂停会话现场写摘要：</p>
+
+<div class="term-head"><span>text</span><span>时序示意</span></div>
+<pre><code>60k tokens before the threshold   summary of the conversation so far starts in the background
+                                  the session keeps going; the summary is held, not applied
+threshold                         the held summary is swapped in; everything since it is kept as is</code></pre>
+
+<p>在小上下文窗口上，摘要最早在「上次压缩后第一条响应」与「阈值」之间的一半处启动。</p>
+
+<table>
+<thead>
+<tr><th>规则</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td>成本</td><td>摘要请求复用提示词缓存。一份从未被用上的摘要（比如会话在到达阈值前就结束了）仍然消耗 token。</td></tr>
+<tr><td>等待</td><td>压缩时机到了而摘要还没写完时，会话会等它写完。</td></tr>
+<tr><td>回退</td><td>当「持有的摘要之后的新增对话」超过阈值约 40%，或者对话的开头发生了变化时，压缩改为照常重新总结。</td></tr>
+<tr><td>跳过</td><td>原生压缩（native compaction）不使用它。刚切换模型后，或中断时间超过提示词缓存时长后，从下一条响应开始才启用。</td></tr>
+<tr><td>存储</td><td>持有的摘要只存在内存里，重启即丢失。</td></tr>
+</tbody>
+</table>
+
+<p>想只在压缩时机到了才写摘要，把它关掉：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "background": false,
+  },
+}</code></pre>
+
+<h2>提供商侧压缩（Providers）</h2>
+<p>有些提供商可以在它们那边压缩对话。用 <code>settings.compaction</code> 按提供商或按模型开启：</p>
+
+<div class="term-head"><span>opencode.jsonc</span><span>JSONC</span></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}</code></pre>
+
+<p>模型设置优先于提供商设置。<code>native</code> 使用提供商的压缩；<code>summary</code> 使用 OpenCode 自己的摘要压缩。</p>
+
+<p>使用原生压缩时，OpenCode 把对话发送到提供商的压缩端点，提供商返回一个不透明的加密数据项来「顶替」较早的对话。你的最近消息和附件（最多 <code>keep.tokens</code>）会与它并排保留：</p>
+
+<div class="term-head"><span>text</span><span>前后对比</span></div>
+<pre><code>before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]</code></pre>
+
+<table>
+<thead>
+<tr><th>主题</th><th>行为</th></tr>
+</thead>
+<tbody>
+<tr><td>支持</td><td>OpenAI Responses 系模型。支持程度因部署和模型而异。</td></tr>
+<tr><td>阈值</td><td>与摘要压缩使用相同的 <code>auto</code> 和 <code>buffer</code> 设置。手动请求也可用。</td></tr>
+<tr><td>可移植性</td><td>加密检查点只能在同一提供商同一模型上使用。切换模型后，会话改为从原始对话继续。</td></tr>
+<tr><td>过长</td><td>提供商以「过长」拒绝一次压缩时，OpenCode 会用更小的请求重试，不会切换成摘要压缩。</td></tr>
+</tbody>
+</table>
+
+<h2>摘要长什么样（Summaries）</h2>
+<p>摘要是结构化的，好让另一个智能体能从它接手工作：</p>
+
+<div class="term-head"><span>md</span><span>摘要结构示例</span></div>
+<pre><code>## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.</code></pre>
+
+<p>它涵盖目标与需求、已做的决定、已完成和进行中的工作、阻塞点与下一步动作、相关文件。在保留的最近对话里，过长的工具输出会被缩短，附件数据会被替换成一句简短描述。</p>
+
+<p>压缩之后，你的指令文件（instruction files）的当前版本会成为会话的新基线；见 <a href="instructions.html">指令文件</a>。</p>
+
+<h2>限制（Limits）</h2>
+
+<table>
+<thead>
+<tr><th>限制</th><th>结果</th></tr>
+</thead>
+<tbody>
+<tr><td>模型</td><td>摘要压缩遵循 <code>agents.compaction.model</code>，否则用会话的模型。原生压缩始终用会话的模型。</td></tr>
+<tr><td>历史</td><td>压缩需要「较早的对话」才有东西可替换。当请求几乎全是固定指令和工具 schema 时，压缩腾不出空间。</td></tr>
+<tr><td>大小</td><td>要压缩的对话本身太长时，OpenCode 会发送缩短的文字版，并可能省略最早的几轮交流。</td></tr>
+<tr><td>恢复</td><td>被拒绝为「过长」的请求会压缩后重试一次。第二次仍被拒绝则作为错误返回。</td></tr>
+<tr><td>存储</td><td>较早的消息即使不再发送给模型，也仍然保留在存储中。</td></tr>
+</tbody>
+</table>
+
+<p>比如这种场景压缩也帮不上忙：</p>
+
+<div class="term-head"><span>text</span><span></span></div>
+<pre><code>128k context = 120k fixed instructions and tools + 8k conversation</code></pre>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把上下文窗口想成一张桌子：128k 的桌子坐满了（大段历史、长篇工具输出），新的活就没地方摊开。压缩就是一位「会议记录员」：把前几小时的讨论整理成一页纪要（摘要），桌上只留纪要 + 最近 15k 的对话细节。会议可以无限开下去，但「纪要写不掉的桌布」（固定的系统提示词和几十个工具 schema）始终占着位置——所以固定开销太大的会话，压缩也救不了。</p>
+</aside>
+
+<h2>从 V1 迁移（Migration）</h2>
+<p>V1 使用尾部轮转（tail-turn）和剪除（pruning）行为。V2 使用摘要和 <code>compaction.keep.tokens</code>：</p>
+
+<div class="term-head"><span>jsonc</span><span></span></div>
+<pre><code>{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}</code></pre>
+
+<p>本页介绍的设置和行为都适用于 V2。</p>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

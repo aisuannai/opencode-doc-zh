@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console 概览 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="console" data-group="Console" data-src="https://opencode.ai/docs/console/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Console 概览</h1>
+<p class="lede"><a href="https://opencode.ai/console" target="_blank" rel="noopener">OpenCode Console</a> 是一个可选的在线服务，无论你是独自使用还是团队协作，它都能给 OpenCode 带来一堆额外能力。这一页先给你一张全景图。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>把 OpenCode 本体想象成一台功能完整的「终端电脑」，Console 就是它的「云控制台」：模型额度、团队成员、用量预算、统一策略这些需要跨设备、跨人协作的东西，都集中放在云端管理。CLI 在你电脑上干活，Console 在云端管账、管人、管规矩——两者通过登录打通，缺了谁都不影响另一边单独工作。</p>
+</aside>
+
+<h2>Console 能做什么</h2>
+<p>Console 提供的能力包括：</p>
+<ul>
+<li><a href="console-workspaces.html">工作区（Workspaces）</a>——与你的<a href="console-members.html">团队</a>共享访问权限</li>
+<li><a href="console-models.html">推理（Inference）</a>——同时覆盖专有模型和开源模型</li>
+<li><a href="console-providers.html">提供商（Providers）</a>——通过 Console 网关接入你自己的提供商账号</li>
+<li>用量追踪与<a href="console-budgets.html">预算（Budget）</a>管控</li>
+<li>向全团队下发策略（Policies），统一控制 OpenCode 的行为</li>
+<li><a href="console-websearch.html">网页搜索</a></li>
+<li><a href="console-harnesses.html">Harnesses</a>——让 Claude Code、Codex 等其他智能体也能用上 Console 的模型</li>
+<li><a href="console-go.html">OpenCode Go、Go Plus、Go Teams</a>——每月 10 美元、40 美元、20 美元/成员的订阅方案，获得开源模型的使用权</li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「Harness」在官方语境里指承载 OpenCode 模型的其他智能体外壳——比如 Claude Code、Codex、Raycast 等。你在 Claude Code 里填上 Console 的接入信息，就能让 Claude Code 背后跑的是 Console 提供的模型。细节见 <a href="console-harnesses.html">Harnesses</a> 一章。</p>
+</aside>
+
+<h2>快速上手</h2>
+<p>用 Console <strong>不需要先组建团队</strong>。每个账号注册后自带一个 <strong>Personal（个人）</strong> 工作区，里面只有你一个成员。</p>
+<ol>
+<li>登录 <a href="https://opencode.ai/console" target="_blank" rel="noopener">Console</a>。</li>
+<li>订阅 <a href="console-go.html">Go</a>，或<a href="console-billing.html#add-credits">充值额度</a>，或连接一个<a href="console-providers.html">提供商</a>——三选一即可。</li>
+<li>在 OpenCode 里运行 <code>/connect</code> 并选择工作区。</li>
+<li>（可选）<a href="console-members.html#invite-members">邀请</a>你的团队加入。</li>
+</ol>
+<div class="term-head"><span>OpenCode 命令</span><span>在 TUI 中执行</span></div>
+<pre><code>/connect</code></pre>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><code>/connect</code> 是在 OpenCode 终端界面里输入的斜杠命令，不是在浏览器地址栏或系统终端里执行。连上之后，OpenCode 的请求会走 Console 的网关并按你选择的方案计费；如果只想用自己的 API key，走 <a href="console-providers.html">提供商</a> 页面的自助接入方式即可。</p>
+</aside>
+
+<h2>策略（Policies）</h2>
+<p>在 Console 的 Policies 页面里配置的「提供商（Providers）规则」和「工具（Tools）规则」，会应用到<strong>每一个</strong>连接到该工作区的 OpenCode 客户端上。这些规则以<a href="policies.html#console">策略语句（policy statements）</a>的形式下发，优先级高于成员自己的用户级和项目级配置，并在约一分钟内生效。托管偏好设置（managed preferences）和系统配置文件仍然高于工作区策略；优先级排序详见 <a href="policies.html#precedence">precedence</a> 一节。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>策略就像公司的「行政命令」：你在自己电脑上的配置文件是个人决定，但只要连上了团队工作区，云端下发的规则就压在你的个人配置之上。对管理员来说，这意味着改一处（Console 页面）就能约束全团队的 OpenCode 行为——比如禁止某类工具、限定可用提供商——而不用挨个去改每个人的配置文件。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

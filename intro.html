@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>简介与安装 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="intro" data-group="开始" data-src="https://opencode.ai/docs/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>简介与安装</h1>
+<p class="lede">OpenCode 是一个开源的 AI 编码智能体（coding agent）。它有三种形态：终端里的 TUI、桌面应用、以及 Web 界面。这一页讲清楚它是什么，以及怎么装到你的电脑上。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>「编码智能体」和「代码补全」不是一回事。补全工具（比如早期的 Copilot Tab）是<strong>你写一句它接一句</strong>；而智能体是<strong>你描述目标，它自己拆任务、读代码、改文件、跑命令</strong>，做完再向你汇报。OpenCode 就是后者，而且它运行在你自己的终端里，代码不离开你的电脑（除非你选择连接云端模型）。</p>
+</aside>
+
+<h2>安装 CLI</h2>
+<p>CLI 是 OpenCode 最核心的形态，四种主流安装方式任选其一：</p>
+<div class="term-head"><span>curl</span><span>推荐 · 一行安装</span></div>
+<pre><code>curl -fsSL https://opencode.ai/v2/install | bash</code></pre>
+<div class="term-head"><span>homebrew</span><span>macOS / Linux</span></div>
+<pre><code>brew install anomalyco/tap/opencode-v2</code></pre>
+<div class="term-head"><span>npm</span><span>Node.js 用户</span></div>
+<pre><code>npm install -g @opencode/cli</code></pre>
+<div class="term-head"><span>bun</span><span></span></div>
+<pre><code>bun install -g --trust @opencode/cli</code></pre>
+<p>此外还支持 pnpm、yarn、vite+、AUR（Arch Linux）和 mise：</p>
+<div class="term-head"><span>其它包管理器</span><span></span></div>
+<pre><code>pnpm add -g --allow-build=@opencode/cli @opencode/cli
+yarn global add @opencode/cli
+vp install -g @opencode/cli          # vite+
+paru -S opencode-beta                # Arch Linux (AUR)
+mise use -g opencode                 # 需要 mise ≥ 2026.10.9</code></pre>
+
+<p>npm 包在安装时会通过 postinstall 脚本自动挑选适配你平台的 <code>opencode</code> 原生二进制；Bun 和 pnpm 的命令里显式放行了这个脚本（<code>--trust</code> / <code>--allow-build</code>）；vite+ 无需额外参数；mise 需要较新版本，旧版本 mise 装出来的会是 OpenCode 1.x。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p><strong>Windows 不支持包管理器安装方式。</strong>Windows 用户请用下面的「独立二进制下载」，或考虑 WSL 环境。</p>
+</aside>
+
+<h3>独立二进制下载</h3>
+<p>不想用包管理器，可以直接下载对应平台的可执行文件：</p>
+<ul>
+<li><strong>macOS：</strong><a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip">Apple 芯片</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip">Intel</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip">Intel（基线版）</a></li>
+<li><strong>Windows：</strong><a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip">ARM64</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip">x64</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip">x64（基线版）</a></li>
+<li><strong>Linux (glibc)：</strong><a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz">ARM64</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64.tar.gz">x64</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline.tar.gz">x64（基线版）</a></li>
+<li><strong>Linux (musl)：</strong><a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz">ARM64</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl.tar.gz">x64</a> · <a href="https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl-baseline.tar.gz">x64（基线版）</a></li>
+</ul>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>「基线版（baseline）」是针对老 CPU 的兼容构建：x64 芯片如果要支持 AVX2 之前的旧指令集，就用 baseline 版。如果你的机器较新（近十年的 x64 或任意 Apple Silicon / ARM64），普通版即可。glibc 和 musl 则是 Linux 两套不同的 C 标准库——Ubuntu/Debian/Fedora 用 glibc 版，Alpine 用 musl 版。</p>
+</aside>
+
+<h2>桌面应用</h2>
+<p>喜欢图形界面的话，下载对应平台的 OpenCode Desktop：</p>
+<ul>
+<li><strong>macOS：</strong><a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-arm64.dmg">Apple 芯片</a> · <a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-x64.dmg">Intel</a></li>
+<li><strong>Windows：</strong><a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-x64.exe">x64</a> · <a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-arm64.exe">ARM64</a></li>
+<li><strong>Linux (.deb)：</strong><a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb">x64</a> · <a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.deb">ARM64</a></li>
+<li><strong>Linux (.rpm)：</strong><a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm">x64</a> · <a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm">ARM64</a></li>
+<li><strong>Linux (AppImage)：</strong><a href="https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x64.AppImage">x64</a></li>
+</ul>
+
+<h2>Web 界面</h2>
+<p>用 <code>opencode pair</code> 命令可以打开 Web 界面：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...</code></pre>
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p><code>pair</code> 的意思是「结对编程」：终端里的 OpenCode 在本地起一个一次性链接，你在浏览器里打开它，就能在网页上和同一个会话协作。链接<strong>只能用一次、5 分钟后过期</strong>，所以不用担心别人扫到这个端口就能蹭进来。</p>
+</aside>
+
+<h2>Docker</h2>
+<p>Docker 镜像使用带版本号的 tag，例如 <code>ghcr.io/anomalyco/opencode:2.0.0</code>。</p>
+
+<h2>连接模型</h2>
+<p>OpenCode 内置支持大量 LLM 提供商，可以在 TUI 里用 <a href="cli-providers.html"><code>/connect</code></a> 直接连接。要配置自定义提供商（比如中转 API 或本地模型），见 <a href="providers.html">Providers</a> 一章。</p>
+<p>如果想要开箱即用的顶级编码模型，可以使用 <a href="https://opencode.ai/console">OpenCode Console</a>，或者选择 <a href="console-go.html">OpenCode Go</a>——每月 10 美元的订阅方案，直接获得多个顶级编码模型的使用权。</p>
+
+<h2>个性化定制</h2>
+<p>装好之后，OpenCode 的几乎所有行为都可以改造：</p>
+<ul>
+<li>改 <a href="config.html">配置文件</a>（模型、权限、行为）</li>
+<li>加载 <a href="plugins.html">插件</a>，扩展 hook 和工具</li>
+<li>接入 <a href="mcp-servers.html">MCP 服务器</a>，获得海量现成工具</li>
+<li>创建<a href="commands.html">自定义命令</a>，把常用流程一键化</li>
+</ul>
+<p>终端界面的主题和快捷键在 <a href="cli-config.html">CLI 设置</a>里配置。</p>
+
+<h2>深入学习</h2>
+<p>Boot.dev 有一门与 OpenCode 团队合作制作的《AI Coding with OpenCode》课程，内容可免费阅读和观看（部分交互功能需要付费）：<a href="https://www.boot.dev/courses/learn-ai-coding">boot.dev/courses/learn-ai-coding</a>。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>装完之后建议按这个顺序往下读：<a href="cli-intro.html">CLI 简介</a>（认识 TUI 操作）→ <a href="agents.html">Agents</a>（理解 Plan/Build 两种模式）→ <a href="config.html">配置</a>（把模型和权限调教好）。三篇读完就能正常开工了。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>

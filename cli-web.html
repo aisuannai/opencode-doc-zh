@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web 界面 · OpenCode 中文文档</title>
+<script>document.documentElement.dataset.theme=localStorage.getItem("oc-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")</script>
+<link rel="stylesheet" href="assets/styles.css">
+<script defer src="assets/nav.js"></script>
+</head>
+<body data-file="cli-web" data-group="CLI" data-src="https://opencode.ai/docs/cli/web/">
+<div id="progress"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main">
+<div class="topbar"><nav class="crumbs"></nav></div>
+<article class="doc">
+<h1>Web 界面</h1>
+<p class="lede">OpenCode 自带一个 Web UI，由驱动 TUI 的同一台服务器提供，默认开启并有密码保护。这一页讲怎么连接它、通过 SSH 或公网远程访问，以及如何自建独立服务器。</p>
+
+<aside class="note idea">
+<p><span class="tag">🧠 通俗理解</span></p>
+<p>TUI 和 Web UI 就像同一个助手的两个「窗口」：后台是同一台服务器、同一批会话。你在终端里开的会话，切到浏览器里也能接着看接着聊。密码保护保证只有你能打开这个网页——它不是公开网站，而是「挂在 localhost 上的私人界面」。</p>
+</aside>
+
+<h2>连接方式</h2>
+<p>用 <code>opencode pair</code> 生成一次性连接：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...</code></pre>
+<p>在浏览器打开这个链接后，浏览器会拿到一个会话 cookie 并加载 Web UI。用 OpenCode 手机 App 扫这个二维码，或把链接粘贴进 App 的服务器地址输入框，也能用同样的方式连上 App。会话有效期为 30 天；修改服务器密码会让所有已登录会话全部下线。</p>
+
+<h3>通过 SSH 使用</h3>
+<p>服务器默认只监听 localhost。当服务器在远程机器上时，把它的端口从你本机转发过去，然后在本地打开打印出的链接：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ ssh -L 49374:127.0.0.1:49374 my-server</code></pre>
+<p>服务器的默认端口因平台而异：</p>
+<table>
+<thead><tr><th>平台</th><th>默认端口</th></tr></thead>
+<tbody>
+<tr><td>macOS、Linux 和 WSL</td><td><code>49374</code></td></tr>
+<tr><td>Windows</td><td><code>28894</code></td></tr>
+</tbody>
+</table>
+<p>Windows 从 49152 起的端口段是系统保留端口，而 WSL 镜像网络模式在更低的位置又保留了一段。用 <code>opencode service status</code> 打印当前实际地址：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service status
+http://127.0.0.1:49374</code></pre>
+<p>可以用 <code>opencode service</code> 命令修改这些配置。</p>
+
+<aside class="note warn">
+<p><span class="tag">⚠️ 注意</span></p>
+<p>SSH 转发的地址只在你本机可达，这是最安全的远程使用姿势。千万不要为了图方便直接 <code>--hostname 0.0.0.0</code> 把服务器暴露到公网——除非你明确需要远程访问并配合强密码，否则任何扫到端口的人都可能撞上你的 OpenCode 实例。</p>
+</aside>
+
+<h3>远程访问（OpenTunnel）</h3>
+<p>想从任何地方连接，可以通过 <a href="https://github.com/anomalyco/opentunnel" target="_blank" rel="noopener">OpenTunnel</a> 的远程地址来配对：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode pair --remote</code></pre>
+<p>第一次开启远程访问时，它会先征求你的同意：</p>
+<div class="term-head"><span>text</span><span>确认提示</span></div>
+<pre><code>▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No</code></pre>
+<p>在非交互终端下运行会直接失败，除非加上 <code>--yes</code> 表示接受。接受之后，后续运行会跳过这个询问——即使你之后用 <code>opencode service set remote false</code> 关掉了远程访问也一样。</p>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>OpenTunnel 通道是端到端加密的，访问仍需你的服务器密码，所以「暴露到互联网」指的是建立一条加密隧道，而不是把端口裸奔在公网上。这比手动配 frp / ngrok 加反向代理简单得多，适合在手机 App 上远程查看和指挥家里的开发机。</p>
+</aside>
+
+<h2>配置服务</h2>
+<p>所有服务选项都可以用 <code>opencode service set</code> 设置：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code># 监听所有网络接口
+$ opencode service set hostname 0.0.0.0
+
+# 使用固定端口，而不是渠道默认值
+$ opencode service set port 49374
+
+# 替换自动生成的密码
+$ opencode service set password "a-long-secret"
+
+# 允许来自其它域名的 Web 客户端
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# 给服务器进程传递一个环境变量
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG</code></pre>
+<p><strong>注意：</strong>修改任何设置都会停掉后台服务器，需要手动重启才能让新配置生效：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode service start</code></pre>
+
+<h2>独立服务器（Standalone）</h2>
+<p><code>opencode serve</code> 可以在前台运行同一台服务器，而不走共享的后台服务：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password &lt;password&gt;</code></pre>
+<p>以下场景适合用它：</p>
+<ul>
+<li>在共享的、常驻的或远程的主机上运行 OpenCode，然后用 <code>opencode --server &lt;url&gt;</code> 连接客户端。</li>
+<li>为单个进程精确控制主机名、端口和 CORS 域名。</li>
+<li>在 systemd、Docker 或其它期望前台进程的管理器之下运行。</li>
+<li>不使用共享后台服务，而是保留一台专用服务器。</li>
+</ul>
+<p>客户端用 <code>--server</code> 连接：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ opencode --server http://127.0.0.1:4096</code></pre>
+
+<h3>鉴权</h3>
+<p>设置 <code>OPENCODE_PASSWORD</code> 可以用固定密码替代自动生成的密码。客户端用 <code>opencode --server</code> 连接时也读取同一个变量：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096</code></pre>
+<p>其它 HTTP 客户端使用 Basic Auth：用户名固定为 <code>opencode</code>，只有密码可以改：</p>
+<div class="term-head"><span>bash</span><span></span></div>
+<pre><code>$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info</code></pre>
+
+<aside class="note plus">
+<p><span class="tag">💡 扩展</span></p>
+<p>推荐用固定密码 + systemd 的组合把 <code>opencode serve</code> 跑成常驻服务：密码放在环境变量或密钥管理里，不写进启动脚本明文。这样多个团队成员可以各自用 TUI 连接同一台服务器共享会话，也是 CI 机器上跑自动化任务的常见形态。</p>
+</aside>
+</article>
+</main>
+<aside class="toc" id="toc"></aside>
+</div>
+</body>
+</html>
